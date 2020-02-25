@@ -2,7 +2,8 @@
    LUCA CROTTI @ 2019
    PROGETTO SEGANTINI SMART PARK
    FILE:   ILARIA_PCB
-   MODIFICATO DA NORMAN MULINACCI @ 2020
+   MODIFICATO DA NORMAN MULINACCI E ROMEO LORENZO @ 2020
+   
 
       HW: 
       - PCB: ILARIA_PCBV4
@@ -40,7 +41,7 @@
                             
 */
 
-#define VERSION "MOD 25c"
+#define VERSION "MOD 25c.2"
 
 #include "FS.h"
 #include "SD.h"
@@ -80,18 +81,14 @@ HardwareSerial PMSerial(2);  // seriale1  (UART0=0; UART1=1; UART2=2)
 
 //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
 // definizioni per deep sleep
-#define uS_TO_S_FACTOR 			1000000  		/* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  			1800     		/* Time ESP32 will go to sleep (in seconds) 30 minutes = 1800 secs */ 
-#define AVG_MEASUREMENTS_AMOUNT 6 	 			/* Amount of measurements */
-#define AVG_MEASUREMENTS_DELAY	10000 			/* amount of delay between measurements (in milliseconds) */
+#define uS_TO_S_FACTOR 1000000 				 	/* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  1800     				/* Time ESP32 will go to sleep (in seconds) 30 minutes = 1800 secs */
+#define AVG_MEASUREMENTS_AMOUNT 6	 			/* Amount of measurements */
+#define AVG_MEASUREMENTS_DELAY	1000	 			/* amount of delay between measurements (in milliseconds) */
+#define PREHEATING   90000           /* amount of preheating (in milliseconds) 1.5 minutes = 90000 ms*/
+
 RTC_DATA_ATTR int bootCount = 0;
 //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
-
-
-////////dati interni, non modificare////////
-#define READ_DELAY	   			10      		/* amount of delay between sensor measurements (in milliseconds) */
-#define READ_AMOUNT    			1       		/* Amount of measurements per sensor*/
-////////////////////////////////////////////
 
 File root;
 WiFiClient client;
@@ -210,15 +207,14 @@ bool BME680_run = true;
 //bool UV_run = false;
 
 ///////////VARIABILI PER MEDIA///////
-	float MQ7[1]; //fase10
-	  float MICS6814[8]; //fase15
-	  float MICS4514[3]; //fase20
-	  float SDS021[4]; //fase30
-	  float PMS5003[3]; //fase35
-	  float BME280[4];  //fase40
-	  float BME680[4]; //fase45
-  //////////////////////////////////
-
+	  float MQ7[1]       = {0}; //fase10
+	  float MICS6814[8]  = {0,0,0,0,0,0,0,0}; //fase15
+	  float MICS4514[2]  = {0,0};//fase20
+	  float SDS021[4]    = {0,0,0,0}; //fase30
+	  float PMS5003[3]   = {0,0,0}; //fase35
+	  float BME280[4]	 = {0,0,0,0};  //fase40
+	  float BME680[4] 	 = {0,0,0,0}; //fase45
+//////////////////////////////////
 
 //++++++variabile per distinguere tra centralina mobile (true) o fissa (false)++++++++
 bool mobile_unit = false;
@@ -227,7 +223,7 @@ bool mobile_unit = false;
 byte mac[6];
 
 //++++++++++++++++++++++++++++funzionalità di DEBUG+++++++++++++++++++++
-bool DEBBUG = true;
+bool DEBBUG = false;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 //*****************************************************************
@@ -377,7 +373,6 @@ unsigned char clock_icon16x16[] = {
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void drawScrHead() {
-	Serial.println("DrawHead");
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x13_tf);
 
@@ -407,7 +402,6 @@ void drawScrHead() {
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void appendFile(fs::FS &fs, String path, String message) {
-	Serial.println("appendFile");
   if (DEBBUG) Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
@@ -426,7 +420,6 @@ void appendFile(fs::FS &fs, String path, String message) {
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void readFile(fs::FS &fs, const char * path) {
-	Serial.println("readFile");
   Serial.printf("Reading file: %s\n", path);
 
   File file = fs.open(path);
@@ -444,8 +437,7 @@ void readFile(fs::FS &fs, const char * path) {
 
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-void parseCommand(String comm) {
-	Serial.println("parseCommand");
+  void parseCommand(String comm) {
   String part1;
   String part2;
   String part3;
@@ -495,9 +487,7 @@ void parseCommand(String comm) {
 
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 boolean readPMSdata(Stream *s) {  //per PMS5003
-	Serial.println("ReadPmsData");
   if (! s->available()) {
     return false;
   }
@@ -550,7 +540,6 @@ boolean readPMSdata(Stream *s) {  //per PMS5003
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void print_wakeup_reason(){
-	Serial.println("wakeupReason");
 //Method to print the reason by which ESP32 has been awaken from sleep
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -568,7 +557,6 @@ void print_wakeup_reason(){
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 bool sdcard_init(){
-	Serial.println("sdcardInit");
     if (!SD.begin()) {
       Serial.println("Errore lettore SD CARD!");
       return false;
@@ -600,7 +588,7 @@ bool sdcard_init(){
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 bool connessioneWifi(){
-	Serial.println("ConnessioneWIFI");
+
     Serial.print("MI CONNETTO A: ");
     Serial.print(ssid); Serial.print(" @ "); Serial.println(pwd);
 
@@ -671,7 +659,6 @@ bool connessioneWifi(){
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 String getMacAdr(byte* mc){
-	Serial.println("getMacAdr");
     String macAdr ="";
     WiFi.macAddress(mc);
     macAdr+=String(mc[0],HEX);macAdr+=":";
@@ -705,7 +692,6 @@ String getMacAdr(byte* mc){
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void GetDateTimeStamps() {    // Made from original getFormattedDate() from previous NTPClient package
-	Serial.println("GetDate");
   unsigned long rawTime = timeClient.getEpochTime() / 86400L;  // in days
   unsigned long days = 0, year = 1970;
   uint8_t month;
@@ -735,7 +721,6 @@ void GetDateTimeStamps() {    // Made from original getFormattedDate() from prev
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 String FloatToComma(float value) {    //Converts float values in strings with the decimal part separated from the integer part by a comma
-	Serial.println("floatToComma");
    String convert = String(value);
    convert.replace(".", ",");
    return convert;
@@ -747,7 +732,6 @@ String FloatToComma(float value) {    //Converts float values in strings with th
 //*****************************************************************
 void setup() {
   //inizializzo variabili ++++++++++++++++++++++++++++++++++
-  
   COx = 0;
   COppm = 0;
   temp = 0;
@@ -770,7 +754,6 @@ void setup() {
   u8g2.begin();
   Serial.begin(115200);
   delay(1500);// serve per dare tempo alla seriale di attivarsi
-  Serial.println("Setup");
 
 
   // SPLASH INIZIO ++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -844,7 +827,7 @@ void setup() {
         filecsv.close();
         String headertext = "File di log della centralina: " + codice;
         appendFile(SD, logpath, headertext);
-        appendFile(SD, logpath, "Temp;Hum;Pre;CO;COx;NOx;PM25;PM10;PM1;O3;VOC;Date;Time"); //";NH3;C3H8;C4H10;CH4;H2;C2H5OH" non inseriti
+        appendFile(SD, logpath, "Temp;Hum;Pre;CO;COx;NOx;PM25;PM10;PM1;O3;VOC;Date;Time;NH3;C3H8;C4H10;CH4;H2;C2H5OH");
         Serial.println("File di log creato!");
       } else {
         Serial.println("Errore nel creare il file di log!");
@@ -1033,7 +1016,7 @@ void setup() {
     u8g2.drawStr(8, 55, "ATTENDERE 1:30 MIN.");
     u8g2.sendBuffer();
     // ATTESA
-    //delay(90000);
+    delay(PREHEATING);
   }
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -1055,201 +1038,10 @@ void setup() {
 
 
 //*************************************************************************
-//**********************FUNZIONI DI LETTURA DA SENSORI*********************
-//*****************************CON MEDIA VALORI****************************
-
-//fase10
-float readAvgMQ7(int readAmount, int readDelay){
-	float sum = 0.0;
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-		  // gestione dato ANALOG da sensore CO MQ7
-		  COx = analogRead(32);   //Serial.print("Livello CO-MQ7 = "); Serial.println(CO); (35)
-		  delay(10);
-
-		  // calcolo PPM di CO
-		  VoltLev = COx / rangeV;               // calcolo il livello di tensione letto
-		  Rs = Res1 * (5 - VoltLev) / VoltLev;  // calcolo la resistenza del sensore
-		  ratio = Rs / Res1;
-		  float k1 = -1.3;                      // k1 entità che pesa la linearità (minore = meno lineare)
-		  float k2 = 4.084;                     // k2 fattore moltiplicativo esponenziale
-		  LogCOppm = (log10(ratio) * (k1)) + k2;
-		  sum += pow(10, LogCOppm);
-		  delay(readDelay);
-		}
-		return sum/readAmount;
-	}
-	return 0.0;
-}
-
-//fase15
-void readAvgMICS6814(int readAmount, int readDelay, float avg[8]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			c1 += gas.measure_NH3();    if(c1>=0) MICS6814_NH3=c1;   
-			c2 += gas.measure_CO();     if(c2>=0) MICS6814_COB=c2;    
-			c3 += gas.measure_NO2();    if(c3>=0) MICS6814_NO2=c3;
-			c4 += gas.measure_C3H8();   if(c4>=0) MICS6814_C3H8=c4;  
-			c5 += gas.measure_C4H10();  if(c5>=0) MICS6814_C4H10=c5;
-			c6 += gas.measure_CH4();    if(c6>=0) MICS6814_CH4=c6;
-			c7 += gas.measure_H2();     if(c7>=0) MICS6814_H2=c7;
-			c8 += gas.measure_C2H5OH(); if(c8>=0) MICS6814_C2H5OH=c8;
-			delay(readDelay);
-		}
-		avg[0]=c1/readAmount;
-		avg[1]=c2/readAmount;
-		avg[2]=c3/readAmount;
-		avg[3]=c4/readAmount;
-		avg[4]=c5/readAmount;
-		avg[5]=c6/readAmount;
-		avg[6]=c7/readAmount;
-		avg[7]=c8/readAmount;
-	}
-	  
-}
-
-//fase20
-void readAvgMICS4514(int readAmount, int readDelay, float avg[2]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			avg[0] += analogRead(36);//  Serial.print("Livello NOx = "); Serial.println(NOx);
-			avg[1] += analogRead(39);//  Serial.print("Livello COx = "); Serial.println(COx);
-			delay(readDelay);
-		}
-		avg[0] /= readAmount;
-		avg[1] /= readAmount;
-	}
-}
-
-//fase30
-void readAvgSDS021(int readAmount, int readDelay, float avg[3]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			len = 0;
-			pm10_serial = 0;
-			pm25_serial = 0;
-			checksum_is;
-			checksum_ok = 0;
-			oterror = 1;
-			if (SDS_run) {
-			  if (DEBBUG) Serial.println(SDS_run);
-			  // controllo il sensore PM...
-			  while ((PMSerial.available() > 0) && (PMSerial.available() >= (10 - len))) {
-				buffer = PMSerial.read();
-				value = int(buffer);
-				switch (len) {
-				  case (0): if (value != 170) {
-					  len = -1;
-					}; break;
-				  case (1): if (value != 192) {
-					  len = -1;
-					}; break;
-				  case (2): pm25_serial = value; checksum_is = value; break;
-				  case (3): pm25_serial += (value << 8); checksum_is += value; break;
-				  case (4): pm10_serial = value; checksum_is += value; break;
-				  case (5): pm10_serial += (value << 8); checksum_is += value; break;
-				  case (6): checksum_is += value; break;
-				  case (7): checksum_is += value; break;
-				  case (8): if (value == (checksum_is % 256)) {
-					  checksum_ok = 1;
-					} else {
-					  len = -1;
-					}; break;
-				  case (9): if (value != 171) {
-					  len = -1;
-					}; break;
-				}// fine switch case
-				len++;
-				if (len == 10 && checksum_ok == 1) {
-				  avg[0] += (float)0.0; //PM1
-				  avg[1] += (float)pm10_serial / 10.0; //Serial.print("PM10 = "); Serial.println(PM10);
-				  avg[2] += (float)pm25_serial / 10.0; //Serial.print("PM2.5 = "); Serial.println(PM25);
-				  len = 0; checksum_ok = 0;
-				  pm10_serial = 0.0;
-				  pm25_serial = 0.0;
-				  checksum_is = 0;
-				  oterror = 0;
-				  //buffer=0;
-				}// fine IF
-			  }// fine while
-
-			}// fine IF SDS
-		}
-		for(int i=0; i<3;i++){
-			avg[i]/=readAmount;
-		}
-	}
-}
-
-
-//fase35
-void readAvgPMS5003(int readAmount, int readDelay, float avg[3]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			if (readPMSdata(&PMSerial)) {
-				avg[0]+=data.pm10_standard;
-				avg[1]+=data.pm25_standard;
-				avg[2]+=data.pm100_standard;
-				delay(readDelay);
-			}
-		}
-		for(int i=0; i<3;i++){
-			avg[i]/=readAmount;
-		}
-	}
-}
-
-//fase40
-void readAvgBME280(int readAmount, int readDelay, float avg[4]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			avg[0] = bme.readTemperature();
-			avg[1] = bme.readHumidity();
-			avg[2] = bme.readPressure() / 100.0F;
-			avg[3] = bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
-			delay(readDelay);
-		}
-		for(int i=0; i<4;i++){
-			avg[i]/=readAmount;
-		}
-	}
-}
-
-//fase45
-void readAvgBME680(int readAmount, int readDelay, float avg[4]){
-	if(readAmount>0){
-		for(int i=0; i<readAmount; i++){
-			// Set up oversampling and filter initialization
-			bme680.setTemperatureOversampling(BME680_OS_8X);
-			bme680.setHumidityOversampling(BME680_OS_2X);
-			bme680.setPressureOversampling(BME680_OS_4X);
-			bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
-			bme680.setGasHeater(200, 150); // 320*C for 150 ms
-			delay(300);
-			if (! bme680.performReading()) {
-			  Serial.println("Failed to perform reading :(");
-			}
-			avg[0] += bme680.temperature;
-			avg[1] += bme680.humidity;
-			avg[2] += bme680.pressure / 100.0;
-			avg[3] += bme680.gas_resistance / 1000.0;
-			delay(readDelay);
-		}
-		for(int i=0; i<4;i++){
-			avg[i]/=readAmount;
-		}
-	}
-}
-
-
-
-
 //*************************************************************************
 //*************************************************************************
-//*************************************************************************
-
-
 void loop() {
+
   delay(100);
 
   if (DEBBUG) {
@@ -1266,349 +1058,324 @@ void loop() {
   }
 
   // gestione a FASI
-
-for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){ 
-	
   
-  if (DEBBUG) Serial.printf("NUMERO AVG: %d", z);
-		  //------------------------------------------------------------------------
-		  if (FASE == 5) {  //+++++++++++ AGGIORNO DATA e ORA  +++++++++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 5...");
-			dayStamp = "na";
-			timeStamp = "na";
-			
-			long start = millis();
-			if ((dataora_ok) && (connesso_ok)) {
-			  // aggiorno data e ora ogni LOOP
-			  while ((!timeClient.update())&& (millis()-start <= 10000)) {
-				if (DEBBUG) Serial.println("...aspetto l'ora aggiornata");
-				timeClient.forceUpdate();
-				delay(300);
-			  }
-			  GetDateTimeStamps();
-			  if (DEBBUG) Serial.println(dayStamp);
-			  if (DEBBUG) Serial.println(timeStamp);
-			  delay(500);
-			}// fine if dataora
-			
-			FASE = 10;
-		  }// fine FASE 5   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 10) {  //+++++++++  AGGIORNAMENTO SENSORE CO MQ7  ++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 10...");
-
-			if (MQ7_run) {
-				MQ7[0] += readAvgMQ7(READ_AMOUNT, READ_DELAY);
-				/*
-			  // gestione dato ANALOG da sensore CO MQ7
-			  COx = analogRead(32);   //Serial.print("Livello CO-MQ7 = "); Serial.println(CO); (35)
-			  delay(10);
-
-			  // calcolo PPM di CO
-			  VoltLev = COx / rangeV;               // calcolo il livello di tensione letto
-			  Rs = Res1 * (5 - VoltLev) / VoltLev;  // calcolo la resistenza del sensore
-			  ratio = Rs / Res1;
-			  float k1 = -1.3;                      // k1 entità che pesa la linearità (minore = meno lineare)
-			  float k2 = 4.084;                     // k2 fattore moltiplicativo esponenziale
-			  LogCOppm = (log10(ratio) * (k1)) + k2;
-			  COppm = pow(10, LogCOppm);
-			  */
-			}
-
-			FASE = 15;
-
-		  }// fine FASE 10   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 15) {  //+++++++++  AGGIORNAMENTO SENSORE MICS6814  ++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 15...");
-
-			if (MICS6814_run) {
-				float c[8];
-				readAvgMICS6814(READ_AMOUNT, READ_DELAY,c);
-				MICS6814[0]+=c[0];   
-				MICS6814[1]+=c[1];    
-				MICS6814[2]+=c[3];
-				MICS6814[3]+=c[3];
-				MICS6814[4]+=c[4];
-				MICS6814[5]+=c[5];
-				MICS6814[6]+=c[6];
-				MICS6814[7]+=c[7];
-				/*
-				// gestione dati sensore su I2C
-				c[0] = gas.measure_NH3();    if(c1>=0) MICS6814_NH3=c1;   
-				c[1] = gas.measure_CO();     if(c2>=0) MICS6814_COB=c2;    
-				c[2] = gas.measure_NO2();    if(c3>=0) MICS6814_NO2=c3;
-				c4 = gas.measure_C3H8();   if(c4>=0) MICS6814_C3H8=c4;  
-				c5 = gas.measure_C4H10();  if(c5>=0) MICS6814_C4H10=c5;
-				c6 = gas.measure_CH4();    if(c6>=0) MICS6814_CH4=c6;
-				c7 = gas.measure_H2();     if(c7>=0) MICS6814_H2=c7;
-				c8 = gas.measure_C2H5OH(); if(c8>=0) MICS6814_C2H5OH=c8;
-				*/
-			}
-			delay (100);
-			FASE = 20;
-
-		  }// fine FASE 15   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 20) {  //+++++++++  AGGIORNAMENTO SENSORE MICS4514 +++++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 20...");
-
-			if (MICS4514_run) {
-				float mics4514Val[2];
-				readAvgMICS4514(READ_AMOUNT, READ_DELAY, mics4514Val);
-				MICS4514[0] += mics4514Val[0];
-				MICS4514[1] += mics4514Val[1];
-				//  // gestione dato da MICS4514
-				/*NOx = analogRead(36);//  Serial.print("Livello NOx = "); Serial.println(NOx);
-				COx = analogRead(39);//  Serial.print("Livello COx = "); Serial.println(COx);
-				*/
-			  delay(10);
-			}
-			FASE = 30;
-		  }// fine FASE 20   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 30) {  //+++++++++  AGGIORNAMENTO SENSORE PM SDS021 ++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 30...");
-			float sds021Val[3];
-			readAvgSDS021(READ_AMOUNT, READ_DELAY, sds021Val);
-			SDS021[0] += sds021Val[0]; 
-			SDS021[1] += sds021Val[1];//Serial.print("PM10 = "); Serial.println(PM10);
-			SDS021[2] += sds021Val[2]; //Serial.print("PM2.5 = "); Serial.println(PM25);
-			/*len = 0;
-			pm10_serial = 0;
-			pm25_serial = 0;
-			checksum_is;
-			checksum_ok = 0;
-			oterror = 1;
-			if (SDS_run) {
-			  if (DEBBUG) Serial.println(SDS_run);
-			  // controllo il sensore PM...
-			  while ((PMSerial.available() > 0) && (PMSerial.available() >= (10 - len))) {
-				buffer = PMSerial.read();
-				value = int(buffer);
-				switch (len) {
-				  case (0): if (value != 170) {
-					  len = -1;
-					}; break;
-				  case (1): if (value != 192) {
-					  len = -1;
-					}; break;
-				  case (2): pm25_serial = value; checksum_is = value; break;
-				  case (3): pm25_serial += (value << 8); checksum_is += value; break;
-				  case (4): pm10_serial = value; checksum_is += value; break;
-				  case (5): pm10_serial += (value << 8); checksum_is += value; break;
-				  case (6): checksum_is += value; break;
-				  case (7): checksum_is += value; break;
-				  case (8): if (value == (checksum_is % 256)) {
-					  checksum_ok = 1;
-					} else {
-					  len = -1;
-					}; break;
-				  case (9): if (value != 171) {
-					  len = -1;
-					}; break;
-				}// fine switch case
-				len++;
-				if (len == 10 && checksum_ok == 1) {
-				  PM1 = (float)0.0; 
-				  PM10 = (float)pm10_serial / 10.0; //Serial.print("PM10 = "); Serial.println(PM10);
-				  PM25 = (float)pm25_serial / 10.0; //Serial.print("PM2.5 = "); Serial.println(PM25);
-				  len = 0; checksum_ok = 0;
-				  pm10_serial = 0.0;
-				  pm25_serial = 0.0;
-				  checksum_is = 0;
-				  oterror = 0;
-				  //buffer=0;
-				}// fine IF
-			  }// fine while
-
-			}// fine IF SDS
-			*/
-			if (PMS_run) {
-			  FASE = 35;
-			} else {
-			  FASE = 40;
-			}
-
-		  }// fine FASE 30   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 35) {  //+++++++++  AGGIORNAMENTO SENSORE PMS5003  +++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 35...");
-				float pms5003Val[3];
-				readAvgPMS5003(READ_AMOUNT, READ_DELAY,pms5003Val);
-				PMS5003[0]=pms5003Val[0];
-				PMS5003[1]=pms5003Val[1];
-				PMS5003[2]=pms5003Val[2];
-			/*if (readPMSdata(&PMSerial)) {
-				// reading data was successful!
-				PM1=data.pm10_standard;
-				PM25=data.pm25_standard;
-				PM10=data.pm100_standard;*/
-				if(DEBBUG){
-					Serial.print(data.pm10_standard);Serial.print("\t"); 
-					Serial.print(data.pm25_standard);Serial.print("\t");
-					Serial.print(data.pm100_standard);Serial.print("\t");
-					Serial.print(data.particles_03um);Serial.print("\t");
-					Serial.print(data.particles_05um);Serial.print("\t");
-					Serial.print(data.particles_10um);Serial.print("\t");
-					Serial.print(data.particles_25um);Serial.print("\t");
-					Serial.print(data.particles_50um);Serial.print("\t");
-					Serial.println(data.particles_100um);
-					delay(300);
-				}// fine IF DEBBUG
-			//}//fine IF read...
-			FASE = 40;
-		  }// fine FASE 35   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 40) {  //+++++++++  AGGIORNAMENTO SENSORE BME280  ++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 40...");
-
-			if (BME280_run) {
-				float bme280Val[4];
-				readAvgBME280(READ_AMOUNT, READ_DELAY, bme280Val);
-				BME280[0] = bme280Val[0];
-				BME280[1] = bme280Val[1];
-				BME280[2] = bme280Val[2];
-				BME280[3] = bme280Val[3];
-				/*
-			  if (DEBBUG) Serial.println("bme280..");
-			  // gestione sensore BME280
-			  temp = bme.readTemperature();
-			  hum = bme.readHumidity();
-			  pre = bme.readPressure() / 100.0F;
-			  alt = bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
-			  */
-			}
-			
-
-			if (BME680_run) {
-			  FASE = 45;
-			} else {
-			  FASE = 50;
-			}
-		  }// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-
-
-
-
-
-		  //------------------------------------------------------------------------
-		  if (FASE == 45) {  //+++++++++  AGGIORNAMENTO SENSORE BME680  ++++++++++++
-			if (DEBBUG) Serial.println("...sono in fase 45...");
-			float bme680Val[4];
-				readAvgBME680(READ_AMOUNT, READ_DELAY,bme680Val);
-				BME680[0] = bme680Val[0];
-				BME680[1] = bme680Val[1];
-				BME680[2] = bme680Val[2];
-				BME680[3] = bme680Val[3];
-			/*
-			// Set up oversampling and filter initialization
-			bme680.setTemperatureOversampling(BME680_OS_8X);
-			bme680.setHumidityOversampling(BME680_OS_2X);
-			bme680.setPressureOversampling(BME680_OS_4X);
-			bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
-			bme680.setGasHeater(200, 150); // 320*C for 150 ms
+  for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){ //+++++++++  AGGIORNAMENTO SENSORI  ++++++++++++
+	 if (DEBBUG) Serial.printf("NUMERO AVG: %d", z);
+	 
+	  //------------------------------------------------------------------------
+	  if (FASE == 5) {  //+++++++++++ AGGIORNO DATA e ORA  +++++++++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 5...");
+		dayStamp = "na";
+		timeStamp = "na";
+		
+		long start = millis();
+		if ((dataora_ok) && (connesso_ok)) {
+		  // aggiorno data e ora ogni LOOP
+		  while ((!timeClient.update())&& (millis()-start <= 10000)) {
+			if (DEBBUG) Serial.println("...aspetto l'ora aggiornata");
+			timeClient.forceUpdate();
 			delay(300);
-			if (! bme680.performReading()) {
-			  Serial.println("Failed to perform reading :(");
-			  //return;
-			}
-			
-			temp = bme680.temperature;
-			hum = bme680.humidity;
-			pre = bme680.pressure / 100.0;
-			VOC = bme680.gas_resistance / 1000.0;
-			*/
+		  }
+		  GetDateTimeStamps();
+		  if (DEBBUG) Serial.println(dayStamp);
+		  if (DEBBUG) Serial.println(timeStamp);
+		  delay(500);
+		}// fine if dataora
+		
+		FASE = 10;
+	  }// fine FASE 5   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 10) {  //+++++++++  AGGIORNAMENTO SENSORE CO MQ7  ++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 10...");
+
+		if (MQ7_run) {
+		  // gestione dato ANALOG da sensore CO MQ7
+		  COx = analogRead(32);   //Serial.print("Livello CO-MQ7 = "); Serial.println(CO); (35)
+		  delay(10);
+
+		  // calcolo PPM di CO
+		  VoltLev = COx / rangeV;               // calcolo il livello di tensione letto
+		  Rs = Res1 * (5 - VoltLev) / VoltLev;  // calcolo la resistenza del sensore
+		  ratio = Rs / Res1;
+		  float k1 = -1.3;                      // k1 entità che pesa la linearità (minore = meno lineare)
+		  float k2 = 4.084;                     // k2 fattore moltiplicativo esponenziale
+		  LogCOppm = (log10(ratio) * (k1)) + k2;
+		  MQ7[0] += pow(10, LogCOppm);
+		  //COppm = pow(10, LogCOppm);
+		}
+
+		FASE = 15;
+
+	  }// fine FASE 10   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 15) {  //+++++++++  AGGIORNAMENTO SENSORE MICS6814  ++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 15...");
+
+		if (MICS6814_run) {
+		  // gestione dati sensore su I2C
+		  //c1 = gas.measure_NH3();    if(c1>=0) MICS6814_NH3=c1;
+			MICS6814[0] += gas.measure_NH3();
+		  //c2 = gas.measure_CO();     if(c2>=0) MICS6814_COB=c2;    
+			MICS6814[1] += gas.measure_CO();
+		  //c3 = gas.measure_NO2();    if(c3>=0) MICS6814_NO2=c3;
+			MICS6814[2] += gas.measure_NO2();
+		  //c4 = gas.measure_C3H8();   if(c4>=0) MICS6814_C3H8=c4;  
+			MICS6814[3] += gas.measure_C3H8();
+		  //c5 = gas.measure_C4H10();  if(c5>=0) MICS6814_C4H10=c5;
+			MICS6814[4] += gas.measure_C4H10();
+		  //c6 = gas.measure_CH4();    if(c6>=0) MICS6814_CH4=c6;
+			MICS6814[5] += gas.measure_CH4();
+		  //c7 = gas.measure_H2();     if(c7>=0) MICS6814_H2=c7;
+			MICS6814[6] += gas.measure_H2();
+		  //c8 = gas.measure_C2H5OH(); if(c8>=0) MICS6814_C2H5OH=c8;
+			MICS6814[7] += gas.measure_C2H5OH();
+		}
+		delay (100);
+		FASE = 20;
+
+	  }// fine FASE 15   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 20) {  //+++++++++  AGGIORNAMENTO SENSORE MICS4514 +++++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 20...");
+
+		if (MICS4514_run) {
+		  //  // gestione dato da MICS4514
+		  MICS4514[0] += analogRead(36);
+		  //NOx = analogRead(36);//  Serial.print("Livello NOx = "); Serial.println(NOx);
+		  MICS4514[1] += analogRead(39);
+		  //COx = analogRead(39);//  Serial.print("Livello COx = "); Serial.println(COx);
+		  delay(10);
+		}
+		FASE = 30;
+	  }// fine FASE 20   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 30) {  //+++++++++  AGGIORNAMENTO SENSORE PM SDS021 ++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 30...");
+		len = 0;
+		pm10_serial = 0;
+		pm25_serial = 0;
+		checksum_is;
+		checksum_ok = 0;
+		oterror = 1;
+		if (SDS_run) {
+		  if (DEBBUG) Serial.println(SDS_run);
+		  // controllo il sensore PM...
+		  while ((PMSerial.available() > 0) && (PMSerial.available() >= (10 - len))) {
+			buffer = PMSerial.read();
+			value = int(buffer);
+			switch (len) {
+			  case (0): if (value != 170) {
+				  len = -1;
+				}; break;
+			  case (1): if (value != 192) {
+				  len = -1;
+				}; break;
+			  case (2): pm25_serial = value; checksum_is = value; break;
+			  case (3): pm25_serial += (value << 8); checksum_is += value; break;
+			  case (4): pm10_serial = value; checksum_is += value; break;
+			  case (5): pm10_serial += (value << 8); checksum_is += value; break;
+			  case (6): checksum_is += value; break;
+			  case (7): checksum_is += value; break;
+			  case (8): if (value == (checksum_is % 256)) {
+				  checksum_ok = 1;
+				} else {
+				  len = -1;
+				}; break;
+			  case (9): if (value != 171) {
+				  len = -1;
+				}; break;
+			}// fine switch case
+			len++;
+			if (len == 10 && checksum_ok == 1) {
+				SDS021[0] += (float)0.0; 
+			  //PM1 = (float)0.0; 
+				SDS021[1] += (float)pm10_serial / 10.0;
+			  //PM10 = (float)pm10_serial / 10.0; //Serial.print("PM10 = "); Serial.println(PM10);
+			  SDS021[2] += (float)pm25_serial / 10.0;
+			  //PM25 = (float)pm25_serial / 10.0; //Serial.print("PM2.5 = "); Serial.println(PM25);
+			  len = 0; checksum_ok = 0;
+			  pm10_serial = 0.0;
+			  pm25_serial = 0.0;
+			  checksum_is = 0;
+			  oterror = 0;
+			  //buffer=0;
+			}// fine IF
+		  }// fine while
+
+		}// fine IF SDS
+
+		if (PMS_run) {
+		  FASE = 35;
+		} else {
+		  FASE = 40;
+		}
+
+	  }// fine FASE 30   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 35) {  //+++++++++  AGGIORNAMENTO SENSORE PMS5003  +++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 35...");
+
+		if (readPMSdata(&PMSerial)) {
+			// reading data was successful!
+			PMS5003[0] += data.pm10_standard;
+			//PM1=data.pm10_standard;
+			PMS5003[1] += data.pm25_standard;
+			//PM25=data.pm25_standard;
+			PMS5003[2] += data.pm100_standard;
+			//PM10=data.pm100_standard;
 			if(DEBBUG){
-				Serial.print("Temperature = "); Serial.print(bme680.temperature); Serial.println(" *C");
-				Serial.print("Pressure = "); Serial.print(bme680.pressure / 100.0); Serial.println(" hPa");
-				Serial.print("Humidity = "); Serial.print(bme680.humidity); Serial.println(" %");
-				Serial.print("Gas = "); Serial.print(bme680.gas_resistance / 1000.0); Serial.println(" KOhms");
-				Serial.println();
-			}
+				Serial.print(data.pm10_standard);Serial.print("\t"); 
+				Serial.print(data.pm25_standard);Serial.print("\t");
+				Serial.print(data.pm100_standard);Serial.print("\t");
+				Serial.print(data.particles_03um);Serial.print("\t");
+				Serial.print(data.particles_05um);Serial.print("\t");
+				Serial.print(data.particles_10um);Serial.print("\t");
+				Serial.print(data.particles_25um);Serial.print("\t");
+				Serial.print(data.particles_50um);Serial.print("\t");
+				Serial.println(data.particles_100um);
+				delay(300);
+			}// fine IF DEBBUG
+		}//fine IF read...
+	  
+		FASE = 40;
+
+	  }// fine FASE 35   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
 
 
-			FASE = 60;
-		  }// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
+
+
+
+
+	  //------------------------------------------------------------------------
+	  if (FASE == 40) {  //+++++++++  AGGIORNAMENTO SENSORE BME280  ++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 40...");
+
+		if (BME280_run) {
+		  if (DEBBUG) Serial.println("bme280..");
+		  // gestione sensore BME280
+		  BME280[0] += bme.readTemperature();
+		  //temp = bme.readTemperature();
+		  BME280[1] += bme.readHumidity();
+		  //hum = bme.readHumidity();
+		  BME280[2] += bme.readPressure();
+		  //pre = bme.readPressure() / 100.0F;
+		  BME280[3] += bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
+		  //alt = bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
+		}
+
+		if (BME680_run) {
+		  FASE = 45;
+		} else {
+		  FASE = 50;
+		}
+	  }// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
 
 
 
 
 
-		/*
-		  //------------------------------------------------------------------------
-		  if (FASE == 50) {  //+++++++++  AGGIORNAMENTO SENSORE luce e UV  +++++++++
-			if (DEBBUG) Serial.println("...sono in fase 50...");
-			luce = 333;
-			UVlight = 444;
-			/////////////////
-			FASE = 60;
-		  }// fine FASE 50   //++++++++++++++++++++++++++++++++++++++++++++++
-		  //------------------------------------------------------------------------
-		*/
+	  //------------------------------------------------------------------------
+	  if (FASE == 45) {  //+++++++++  AGGIORNAMENTO SENSORE BME680  ++++++++++++
+		if (DEBBUG) Serial.println("...sono in fase 45...");
+
+		// Set up oversampling and filter initialization
+		bme680.setTemperatureOversampling(BME680_OS_8X);
+		bme680.setHumidityOversampling(BME680_OS_2X);
+		bme680.setPressureOversampling(BME680_OS_4X);
+		bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
+		bme680.setGasHeater(200, 150); // 320*C for 150 ms
+		delay(300);
+		if (! bme680.performReading()) {
+		  Serial.println("Failed to perform reading :(");
+		  //return;
+		}
+		 BME680[0] += bme680.temperature;
+		//temp = bme680.temperature;
+		 BME680[1] += bme680.humidity;
+		//hum = bme680.humidity;
+		 BME680[2] += bme680.pressure / 100.0;
+		//pre = bme680.pressure / 100.0;
+		 BME680[3] += bme680.gas_resistance / 1000.0;;
+		//VOC = bme680.gas_resistance / 1000.0;
 		
-		
-		
-		if(z<=AVG_MEASUREMENTS_AMOUNT){
-      Serial.printf("Aspetto per fare la prossima misurazione, %d ms",AVG_MEASUREMENTS_DELAY);
+		if(DEBBUG){
+			Serial.print("Temperature = "); Serial.print(bme680.temperature); Serial.println(" *C");
+			Serial.print("Pressure = "); Serial.print(bme680.pressure / 100.0); Serial.println(" hPa");
+			Serial.print("Humidity = "); Serial.print(bme680.humidity); Serial.println(" %");
+			Serial.print("Gas = "); Serial.print(bme680.gas_resistance / 1000.0); Serial.println(" KOhms");
+			Serial.println();
+		}
+
+
+		FASE = 60;
+	  }// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
+	  //------------------------------------------------------------------------
+
+
+
+
+
+	/*
+	
+	
+  //------------------------------------------------------------------------
+  if (FASE == 50) {  //+++++++++  AGGIORNAMENTO SENSORE luce e UV  +++++++++
+    if (DEBBUG) Serial.println("...sono in fase 50...");
+    luce = 333;
+    UVlight = 444;
+    /////////////////
+    FASE = 60;
+  }// fine FASE 50   //++++++++++++++++++++++++++++++++++++++++++++++
+  //------------------------------------------------------------------------
+*/
+
+	if(z<=AVG_MEASUREMENTS_AMOUNT){
+      Serial.printf("Aspetto per fare la prossima misurazione, %d ms\n",AVG_MEASUREMENTS_DELAY);
       delay(AVG_MEASUREMENTS_DELAY);
       FASE=10;
 		}
 }
 	FASE = 59;
-
-    /*
-  float MQ7[1]; //fase10
-	  float MICS6814[8]; //fase15
-	  float MICS4514[3]; //fase20
-	  float SDS021[4]; //fase30
-	  float PMS5003[3]; //fase35
-	  float BME280[4];  //fase40
-	  float BME680[4]; //fase45*/
-	if(FASE == 59){
+  
+  //------------------------------------------------------------------------
+  if(FASE == 59){	 //+++++++++  CALCOLO MEDIE VALORI  ++++++++++++
 		if (DEBBUG) Serial.println("...sono in fase 59...");
 		//+++++++++  MEDIA SENSORE CO MQ7  ++++++++++++
 		for(int q=0; q<sizeof(MQ7);q++){
 			MQ7[q] /= AVG_MEASUREMENTS_AMOUNT;
 		}
 		COppm = MQ7[0];
+		
 		//+++++++++  MEDIA SENSORE MICS6814  ++++++++++++
 		for(int q=0; q<sizeof(MICS6814);q++){
 			MICS6814[q] /= AVG_MEASUREMENTS_AMOUNT;
@@ -1621,12 +1388,14 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
 		if(MICS6814[5]>=0) MICS6814_CH4=MICS6814[5];
 		if(MICS6814[6]>=0) MICS6814_H2=MICS6814[6];
 		if(MICS6814[7]>=0) MICS6814_C2H5OH=MICS6814[7];
+		
 		//+++++++++  MEDIA SENSORE MICS4514  ++++++++++++
 		for(int q=0; q<sizeof(MICS4514);q++){
 			MICS4514[q] /= AVG_MEASUREMENTS_AMOUNT;
 		}
 		NOx = MICS4514[0];
 		COx = MICS4514[1];
+		
 		//+++++++++  MEDIA SENSORE PM SDS021  ++++++++++++
 		for(int q=0; q<sizeof(SDS021);q++){
 			SDS021[q] /= AVG_MEASUREMENTS_AMOUNT;
@@ -1634,6 +1403,7 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
 		PM1 = SDS021[0]; 
 		PM10 = SDS021[1];
 		PM25 = SDS021[2];
+		
 		//+++++++++  MEDIA SENSORE PMS5003  ++++++++++++
 		for(int q=0; q<sizeof(PMS5003);q++){
 			PMS5003[q] /= AVG_MEASUREMENTS_AMOUNT;
@@ -1641,6 +1411,7 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
 		PM1=PMS5003[0];
 		PM25=PMS5003[1];
 		PM10=PMS5003[2];
+		
 		//+++++++++  MEDIA SENSORE BME280  ++++++++++++
 		for(int q=0; q<sizeof(BME280);q++){
 			BME280[q] /= AVG_MEASUREMENTS_AMOUNT;
@@ -1649,6 +1420,7 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
 		hum = BME280[1];
 		pre = BME280[2];
 		alt = BME280[3];
+		
 		//+++++++++  MEDIA SENSORE BME680  ++++++++++++
 		for(int q=0; q<sizeof(BME680);q++){
 			BME680[q] /= AVG_MEASUREMENTS_AMOUNT;
@@ -1660,6 +1432,10 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
 
     FASE=60;
 	}
+  //------------------------------------------------------------------------
+
+
+
 
 
 
@@ -1719,12 +1495,13 @@ for(int z=0;z<=AVG_MEASUREMENTS_AMOUNT;z++){
       logvalue += FloatToComma(VOC); logvalue += ";";
       logvalue += dayStamp; logvalue += ";";
       logvalue += timeStamp;
-      //logvalue += FloatToComma(MICS6814_NH3); logvalue += ";";
-      //logvalue += FloatToComma(MICS6814_C3H8); logvalue += ";";
-      //logvalue += FloatToComma(MICS6814_C4H10); logvalue += ";";
-      //logvalue += FloatToComma(MICS6814_CH4); logvalue += ";";
-      //logvalue += FloatToComma(MICS6814_H2); logvalue += ";";
-      //logvalue += FloatToComma(MICS6814_C2H5OH); logvalue += ";";
+	  //
+      logvalue += FloatToComma(MICS6814_NH3); logvalue += ";";
+      logvalue += FloatToComma(MICS6814_C3H8); logvalue += ";";
+      logvalue += FloatToComma(MICS6814_C4H10); logvalue += ";";
+      logvalue += FloatToComma(MICS6814_CH4); logvalue += ";";
+      logvalue += FloatToComma(MICS6814_H2); logvalue += ";";
+      logvalue += FloatToComma(MICS6814_C2H5OH); logvalue += ";";
       File filelog = SD.open(logpath, FILE_APPEND);
       delay(100);
       if (!filelog) {
