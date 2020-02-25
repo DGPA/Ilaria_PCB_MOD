@@ -40,7 +40,7 @@
                             
 */
 
-#define VERSION "MOD 25b"
+#define VERSION "MOD 25c"
 
 #include "FS.h"
 #include "SD.h"
