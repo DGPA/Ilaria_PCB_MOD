@@ -42,7 +42,7 @@ HardwareSerial PMSerial(2);  // seriale1  (UART0=0; UART1=1; UART2=2)
 #define TIME_TO_SLEEP  1800     				/* Time ESP32 will go to sleep (in seconds) 30 minutes = 1800 secs */
 #define AVG_MEASUREMENTS_AMOUNT 6	 			/* Amount of measurements */
 #define AVG_MEASUREMENTS_DELAY	1000	 			/* amount of delay between measurements (in milliseconds) */
-#define PREHEATING   90000           /* amount of preheating (in milliseconds) 1.5 minutes = 90000 ms*/
+//define PREHEATING   90000           /* amount of preheating (in milliseconds) 1.5 minutes = 90000 ms*/
 
 RTC_DATA_ATTR int bootCount = 0;
 //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
@@ -54,7 +54,7 @@ WiFiClient client;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
-// Define Leap Year for GetDateTimeStamps()
+// Define Leap Year for getDateTimeStamps()
 #define LEAP_YEAR(Y)     ( (Y>0) && !(Y%4) && ( (Y%100) || !(Y%400) ) )
 
 //++++++++++++ CREDENZIALI PER SITO WEB   +++++++++++++++++++++
@@ -648,7 +648,7 @@ String getMacAdr(byte* mc){
 
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-void GetDateTimeStamps() {    // Made from original getFormattedDate() from previous NTPClient package
+void getDateTimeStamps() {    // Made from original getFormattedDate() from previous NTPClient package
   unsigned long rawTime = timeClient.getEpochTime() / 86400L;  // in days
   unsigned long days = 0, year = 1970;
   uint8_t month;
@@ -677,7 +677,7 @@ void GetDateTimeStamps() {    // Made from original getFormattedDate() from prev
 
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-String FloatToComma(float value) {    //Converts float values in strings with the decimal part separated from the integer part by a comma
+String floatToComma(float value) {    //Converts float values in strings with the decimal part separated from the integer part by a comma
    String convert = String(value);
    convert.replace(".", ",");
    return convert;
@@ -962,7 +962,7 @@ void setup() {
   FASE = 5;
   delay(500);
 
-  
+/*  
   // PRERISCALDAMENTO SENSORI +++++++++++++++++++++++++++++++++++++++++++
   if (!DEBBUG) {
     // MESSAGGIO seriale
@@ -976,7 +976,7 @@ void setup() {
     delay(PREHEATING);
   }
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
+*/
 
   // preparo schermata per LOG su SERIALE +++++++++++++++++++++++++++++++++++++
   Serial.println("\n--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
@@ -1033,7 +1033,7 @@ void loop() {
 			timeClient.forceUpdate();
 			delay(300);
 		  }
-		  GetDateTimeStamps();
+		  getDateTimeStamps();
 		  if (DEBBUG) Serial.println(dayStamp);
 		  if (DEBBUG) Serial.println(timeStamp);
 		  delay(500);
@@ -1401,25 +1401,25 @@ void loop() {
     if (DEBBUG) Serial.println("...sono in fase 60...");
 
   //"Temp\tHum\tPre\tCO\tCOx\tNOx\tPM25\tPM10\tPM1\tO3\tVOC\tDate\tTime\t\t\tNH3\tC3H8\t\tC4H10\t\tCH4\t\tH2\tC2H5OH"
-    Serial.print(FloatToComma(temp));
-    Serial.print("\t"); Serial.print(FloatToComma(hum));
-    Serial.print("\t"); Serial.print(FloatToComma(pre));
-    Serial.print("\t"); Serial.print(FloatToComma(COppm));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_COB));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_NO2));
-    Serial.print("\t"); Serial.print(FloatToComma(PM25));
-    Serial.print("\t"); Serial.print(FloatToComma(PM10));
-    Serial.print("\t"); Serial.print(FloatToComma(PM1));
+    Serial.print(floatToComma(temp));
+    Serial.print("\t"); Serial.print(floatToComma(hum));
+    Serial.print("\t"); Serial.print(floatToComma(pre));
+    Serial.print("\t"); Serial.print(floatToComma(COppm));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_COB));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_NO2));
+    Serial.print("\t"); Serial.print(floatToComma(PM25));
+    Serial.print("\t"); Serial.print(floatToComma(PM10));
+    Serial.print("\t"); Serial.print(floatToComma(PM1));
     Serial.print("\t"); Serial.print("N.D.");
-    Serial.print("\t"); Serial.print(FloatToComma(VOC));
+    Serial.print("\t"); Serial.print(floatToComma(VOC));
     Serial.print("\t"); Serial.print(dayStamp);
     Serial.print("\t"); Serial.print(timeStamp);
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_NH3));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_C3H8));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_C4H10));
-    Serial.print("\t\t"); Serial.print(FloatToComma(MICS6814_CH4));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_H2));
-    Serial.print("\t"); Serial.print(FloatToComma(MICS6814_C2H5OH));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_NH3));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_C3H8));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_C4H10));
+    Serial.print("\t\t"); Serial.print(floatToComma(MICS6814_CH4));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_H2));
+    Serial.print("\t"); Serial.print(floatToComma(MICS6814_C2H5OH));
     Serial.println();
 
     FASE = 70;
@@ -1439,26 +1439,26 @@ void loop() {
 
     if (SD_ok) {
       logvalue = "";
-      logvalue += FloatToComma(temp); logvalue += ";";
-      logvalue += FloatToComma(hum); logvalue += ";";
-      logvalue += FloatToComma(pre); logvalue += ";";
-      logvalue += FloatToComma(COppm); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_COB); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_NO2); logvalue += ";";
-      logvalue += FloatToComma(PM25); logvalue += ";";
-      logvalue += FloatToComma(PM10); logvalue += ";";
-      logvalue += FloatToComma(PM1); logvalue += ";";
+      logvalue += floatToComma(temp); logvalue += ";";
+      logvalue += floatToComma(hum); logvalue += ";";
+      logvalue += floatToComma(pre); logvalue += ";";
+      logvalue += floatToComma(COppm); logvalue += ";";
+      logvalue += floatToComma(MICS6814_COB); logvalue += ";";
+      logvalue += floatToComma(MICS6814_NO2); logvalue += ";";
+      logvalue += floatToComma(PM25); logvalue += ";";
+      logvalue += floatToComma(PM10); logvalue += ";";
+      logvalue += floatToComma(PM1); logvalue += ";";
       logvalue += ""; logvalue += ";";
-      logvalue += FloatToComma(VOC); logvalue += ";";
+      logvalue += floatToComma(VOC); logvalue += ";";
       logvalue += dayStamp; logvalue += ";";
       logvalue += timeStamp;
 	  //
-      logvalue += FloatToComma(MICS6814_NH3); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_C3H8); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_C4H10); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_CH4); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_H2); logvalue += ";";
-      logvalue += FloatToComma(MICS6814_C2H5OH); logvalue += ";";
+      logvalue += floatToComma(MICS6814_NH3); logvalue += ";";
+      logvalue += floatToComma(MICS6814_C3H8); logvalue += ";";
+      logvalue += floatToComma(MICS6814_C4H10); logvalue += ";";
+      logvalue += floatToComma(MICS6814_CH4); logvalue += ";";
+      logvalue += floatToComma(MICS6814_H2); logvalue += ";";
+      logvalue += floatToComma(MICS6814_C2H5OH); logvalue += ";";
       File filelog = SD.open(logpath, FILE_APPEND);
       delay(100);
       if (!filelog) {
@@ -1491,10 +1491,10 @@ void loop() {
     u8g2.drawStr(0, 40, "hPa:");  u8g2.drawStr(68, 40, "VOC:");
     u8g2.drawStr(0, 52, "CO:");   u8g2.drawStr(68, 52, "PM1:");
     u8g2.drawStr(0, 64, "P25:");  u8g2.drawStr(68, 64, "P10:");
-    u8g2.setCursor(25, 28);  u8g2.print(FloatToComma(temp));    u8g2.setCursor(93, 28);  u8g2.print(FloatToComma(hum));
-    u8g2.setCursor(25, 40);  u8g2.print(FloatToComma(pre));     u8g2.setCursor(93, 40);  u8g2.print(FloatToComma(VOC));
-    u8g2.setCursor(25, 52);  u8g2.print(FloatToComma(COppm));   u8g2.setCursor(93, 52);  u8g2.print(FloatToComma(PM1));
-    u8g2.setCursor(25, 64);  u8g2.print(FloatToComma(PM25));    u8g2.setCursor(93, 64);  u8g2.print(FloatToComma(PM10));
+    u8g2.setCursor(25, 28);  u8g2.print(floatToComma(temp));    u8g2.setCursor(93, 28);  u8g2.print(floatToComma(hum));
+    u8g2.setCursor(25, 40);  u8g2.print(floatToComma(pre));     u8g2.setCursor(93, 40);  u8g2.print(floatToComma(VOC));
+    u8g2.setCursor(25, 52);  u8g2.print(floatToComma(COppm));   u8g2.setCursor(93, 52);  u8g2.print(floatToComma(PM1));
+    u8g2.setCursor(25, 64);  u8g2.print(floatToComma(PM25));    u8g2.setCursor(93, 64);  u8g2.print(floatToComma(PM10));
     u8g2.sendBuffer();
     delay(4000);
 
@@ -1505,10 +1505,10 @@ void loop() {
     u8g2.drawStr(0, 52, "NH3:");
     u8g2.drawStr(0, 64, "H2:");
       
-    u8g2.setCursor(40, 28);  u8g2.print(FloatToComma(MICS6814_COB));    
-    u8g2.setCursor(40, 40);  u8g2.print(FloatToComma(MICS6814_NO2));     
-    u8g2.setCursor(40, 52);  u8g2.print(FloatToComma(MICS6814_NH3));   
-    u8g2.setCursor(40, 64);  u8g2.print(FloatToComma(MICS6814_H2));    
+    u8g2.setCursor(40, 28);  u8g2.print(floatToComma(MICS6814_COB));    
+    u8g2.setCursor(40, 40);  u8g2.print(floatToComma(MICS6814_NO2));     
+    u8g2.setCursor(40, 52);  u8g2.print(floatToComma(MICS6814_NH3));   
+    u8g2.setCursor(40, 64);  u8g2.print(floatToComma(MICS6814_H2));    
     u8g2.sendBuffer();
     delay(3000);
 
@@ -1519,10 +1519,10 @@ void loop() {
     u8g2.drawStr(0, 52, "C4H10:");
     u8g2.drawStr(0, 64, "C2H5OH:");
       
-    u8g2.setCursor(50, 28);  u8g2.print(FloatToComma(MICS6814_CH4));    
-    u8g2.setCursor(50, 40);  u8g2.print(FloatToComma(MICS6814_C3H8));     
-    u8g2.setCursor(50, 52);  u8g2.print(FloatToComma(MICS6814_C4H10));   
-    u8g2.setCursor(50, 64);  u8g2.print(FloatToComma(MICS6814_C2H5OH));    
+    u8g2.setCursor(50, 28);  u8g2.print(floatToComma(MICS6814_CH4));    
+    u8g2.setCursor(50, 40);  u8g2.print(floatToComma(MICS6814_C3H8));     
+    u8g2.setCursor(50, 52);  u8g2.print(floatToComma(MICS6814_C4H10));   
+    u8g2.setCursor(50, 64);  u8g2.print(floatToComma(MICS6814_C2H5OH));    
     u8g2.sendBuffer();
     delay(3000);
 
