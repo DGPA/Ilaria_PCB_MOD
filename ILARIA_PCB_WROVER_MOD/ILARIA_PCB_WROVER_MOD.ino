@@ -1,46 +1,3 @@
-/*
-   LUCA CROTTI @ 2019
-   PROGETTO SEGANTINI SMART PARK
-   FILE:   ILARIA_PCB
-   MODIFICATO DA NORMAN MULINACCI E ROMEO LORENZO @ 2020
-   
-
-      HW: 
-      - PCB: ILARIA_PCBV4
-      - MONITOR OLED 1.3" 128x64 SSD1306 interfaccia I2C
-      - ESP32 ESP32-WROVER-B
-                         ____________________
-                        |                     |
-               3V3--- o-|-3V3             GND-|-o
-                      o-|-EN              D23-|-o --- MOSI SDCARD
-      MICS4514-COx -- o-|-VP(D36)         D22-|-o --- SCL OLED+BME+MICS6814
-      MICS4514-NOx -- o-|-VN(D39)     (D1)TX0-|-o
-      MICS4514-pre -- o-|-D34         (D3)RX0-|-o
-    MQ-7(COx)A0 ----- o-|-D35             D21-|-o --- SDA OLED+BME+MICS6814
-    MQ-7(COx)D0 ----- o-|-D32             GND-|-o
-          dip-1 ----- o-|-D33             D19-|-o --- MISO SDCARD u8
-          dip-2 ----- o-|-D25             D18-|-o --- SCK SDCARD
-          dip-3 ----- o-|-D26             D5 -|-o --- CS SDCARD
-          dip-4 ----- o-|-D27             D17-|-o  -x-x- non usare! protetto
-        RX SENS PM--- o-|-D14             D16-|-o  -x-x- non usare! protetto
-        TX SENS PM--- o-|-D12             D4 -|-o --- PIN ATTIVAZ. MOSFET
-                      o-|-GND             D0 -|-o
-                      o-|-D13             D2 -|-o
-                      o-|-SD2  ---xxx     D15-|-o  -x-x- non usare! protetto
-                      o-|-SD3  ---xxx---  SD1-|-o  -x-x- non usare! protetto
-                      o-|-CMD  ---xxx---  SD0-|-o  -x-x- non usare! protetto
-       VCC-SD+OLED--- o-|-5Vin    xxx---  CLK-|-o  -x-x- non usare! protetto
-                        |                     |
-                        |      _______        |
-                        |     |       |       |
-                        |     |       |       |
-                        |_____|       |_______|
-                              |_______|
-
-
-                            
-*/
-
 #define VERSION "MOD 25c.2"
 
 #include "FS.h"
@@ -767,7 +724,7 @@ void setup() {
   u8g2.setFont(u8g2_font_6x13_tf);
   u8g2.drawStr(5, 15, "MILANO SMART PARK");
   u8g2.drawStr(5, 30, "SW VER."); u8g2.drawStr(50, 30, VERSION); //^^^ versione corrente ^^^
-  u8g2.drawStr(5, 45, "L.C.'19/N.M.'20");
+  u8g2.drawStr(5, 45, "THE ILARIA TEAM '20");
   u8g2.sendBuffer();
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
