@@ -1452,7 +1452,6 @@ void loop() {
       logvalue += floatToComma(VOC); logvalue += ";";
       logvalue += dayStamp; logvalue += ";";
       logvalue += timeStamp;
-	  //
       logvalue += floatToComma(MICS6814_NH3); logvalue += ";";
       logvalue += floatToComma(MICS6814_C3H8); logvalue += ";";
       logvalue += floatToComma(MICS6814_C4H10); logvalue += ";";
