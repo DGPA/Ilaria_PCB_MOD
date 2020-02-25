@@ -2,11 +2,12 @@ ILARIA_PCB_WROVER_MOD firmware changelog
 
 Firmware originale: Luca Crotti
 
-Versione MOD di Norman Mulinacci (2020)
+Versione MOD di Norman Mulinacci, ROMEO LORENZO E DIEGO PORRAS(2020)
 
 
-VERSIONE 25c:
-
+VERSIONE 25c.2:
+	- aggiunta possibilità di inviare solo la media di (x) misurazioni, effettuate ogni (x) secondi
+	- aggiunti i valori precedentemente rimossi dal log su csv
 
 VERSIONE 25b:
 
