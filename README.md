@@ -1,10 +1,10 @@
-ILARIA_PCB_WROVER_MOD firmware changelog
-
-Firmware originale: Luca Crotti
-Versione MOD di Norman Mulinacci (2020)
-
-
-VERSIONE 25c:
+#ILARIA_PCB_WROVER_MOD firmware changelog
+#
+#Firmware originale: Luca Crotti
+#Versione MOD di Norman Mulinacci (2020)
+#
+#
+#VERSIONE 25c:
 
 
 VERSIONE 25b:
