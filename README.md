@@ -38,8 +38,17 @@ VERSIONI MOD by THE ILARIA TEAM (Norman Mulinacci, Romeo Lorenzo e Diego Porras)
                               |_______|
                             
 	
-changelog:
+Changelog:
 
+VERSIONE 25d:
+
+	- risolto problema di memory leak nel modo di calcolare la media delle misurazioni
+	- aggiunto spegnimento del sensore Multichannel durante lo sleep
+	- sistemato piccolo errore nel log del file su SD
+	- sistemato allineamento del log su seriale
+	- rimosso il sistema di gestione per fasi, ora è più semplice lavorare coi blocchi di codice
+	- cambiate alcune modalità di gestione dello schermo integrato
+	- aggiornati i crediti nella schermata iniziale
 
 VERSIONE 25c2:
 
