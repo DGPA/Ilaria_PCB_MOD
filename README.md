@@ -40,7 +40,7 @@ VERSIONI MOD by THE ILARIA TEAM (Norman Mulinacci, Romeo Lorenzo e Diego Porras)
 	
 Changelog:
 
-VERSIONE 25d:
+VERSIONE 25d (Norman Mulinacci):
 
 	- risolto problema di memory leak nel modo di calcolare la media delle misurazioni
 	- aggiunto spegnimento del sensore Multichannel durante lo sleep
@@ -51,12 +51,12 @@ VERSIONE 25d:
 	- cambiate alcune modalità di gestione dello schermo integrato
 	- aggiornati i crediti nella schermata iniziale
 
-VERSIONE 25c2:
+VERSIONE 25c2 (Lorenzo Romeo, Diego Porras):
 
 	- aggiunta possibilità di inviare solo la media di (x) misurazioni, effettuate ogni (x) secondi
 	- aggiunti i valori precedentemente rimossi dal log su csv
 
-VERSIONE 25b:
+VERSIONE 25b (Norman Mulinacci):
 
 	- trascritta e modificata funzione che calcola data per compatibilità con nuove versioni di NTPClient
 	- cambiata modalità di log su SD (da .txt a .csv), cambiato logging con valori in virgola
@@ -64,7 +64,7 @@ VERSIONE 25b:
 	- modificato comportamento in caso di errore su file RETE.txt
 	- unificato aspetto delle schermate del sistema e cambiata icona della scheda microsd
 
-VERSIONE 24:
+VERSIONE 24 (Norman Mulinacci):
 
 	- aggiunto delay di preriscaldamento dei sensori all'avvio
 	- modificata modalità di LOG su seriale e scheda SD (per maggiore conformità col CSV)
