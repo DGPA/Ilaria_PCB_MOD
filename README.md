@@ -6,7 +6,7 @@ VERSIONI MOD by THE ILARIA TEAM (Norman Mulinacci, Romeo Lorenzo e Diego Porras)
 
       HW: 
       - PCB: ILARIA_PCBV4
-      - MONITOR OLED 1.3" 128x64 SSD1306 interfaccia I2C
+      - MONITOR OLED 1.3" 128x64 SH1106 interfaccia I2C
       - ESP32 ESP32-WROVER-B
       
                          ____________________
