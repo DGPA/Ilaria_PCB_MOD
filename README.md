@@ -47,6 +47,7 @@ VERSIONE 25d:
 	- sistemato piccolo errore nel log del file su SD
 	- sistemato allineamento del log su seriale
 	- rimosso il sistema di gestione per fasi, ora è più semplice lavorare coi blocchi di codice
+	- rimossa chiamata a libreria non utilizzata, commentate parti di codice inutilizzate
 	- cambiate alcune modalità di gestione dello schermo integrato
 	- aggiornati i crediti nella schermata iniziale
 
