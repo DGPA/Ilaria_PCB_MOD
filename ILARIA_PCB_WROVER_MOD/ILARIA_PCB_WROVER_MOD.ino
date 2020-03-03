@@ -166,7 +166,7 @@ String MACA = "";
 bool MICS6814_run;
 bool BME680_run;
 bool PMS_run = true;
-bool MQ7_run = true;
+bool MQ7_run = false;
 //bool MICS4514_run = false;
 //bool SDS_run = false;
 //bool BME280_run = false;
