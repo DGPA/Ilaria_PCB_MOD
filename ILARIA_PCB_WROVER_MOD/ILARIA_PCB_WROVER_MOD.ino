@@ -1,13 +1,18 @@
 //
 //  Progetto MILANO SMART PARK - Parco Segantini
 //  ILARIA Firmware per ESP32_WROVER_B
+//  Versioni originali by Luca Crotti
+//  Versioni MOD by THE ILARIA TEAM (Norman Mulinacci, Lorenzo Romeo, Diego Porras)
+//
+//  Librerie richieste: Pacchetto esp32 per Arduino, NTPClient, Adafruit Unified Sensor, Adafruit BME680 Library, MiCS6814-I2C, U8g2
 //
 
-#define VERSION "MOD 25d"
+#define VERSION "MOD 26"
 
-#include "FS.h"
-#include "SD.h"
-#include "SPI.h"
+#include <FS.h>
+#include <SD.h>
+#include <Wire.h>
+#include <SPI.h>
 
 // librerie per gestione RETE WIFI
 #include <WiFi.h>
@@ -15,7 +20,7 @@
 #include <WiFiUdp.h>
 
 #include <Adafruit_Sensor.h>
-#include <MutichannelGasSensor.h>
+#include <MiCS6814-I2C.h>
 #include <Arduino.h>
 
 //#include <Adafruit_BME280.h>
@@ -29,6 +34,9 @@
 //#define BME280_ADD 0x76
 //Adafruit_BME280 bme; // I2C///////Adafruit_BME280 bme(I2C_SDA, I2C_SCL);
 
+//struttura per sensore MICS6814
+MiCS6814 gas;
+
 //strutture e istanze per BME680
 #define SEALEVELPRESSURE_HPA (1013.25)
 Adafruit_BME680 bme680; // I2C
@@ -40,16 +48,21 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 22, 21);   // ES
 // seriale per SDS021 o per PMS5003
 HardwareSerial PMSerial(2);  // seriale1  (UART0=0; UART1=1; UART2=2)
 
-//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
+//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
 // definizioni per deep sleep
-#define uS_TO_S_FACTOR 1000000 				 	/* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  1200    				  /* Time ESP32 will go to sleep (in seconds) 20 minutes = 1200 secs */
-#define AVG_MEASUREMENTS_AMOUNT 10	 	  /* Amount of measurements */
-#define AVG_MEASUREMENTS_DELAY	3000	 	/* amount of delay between measurements (in milliseconds) */
-#define PRE_HEAT_TIME   10               /* pre-heat time in minutes, 10-30 minutes is recommended */
+#define uS_TO_S_FACTOR 1000000 				 	//Conversion factor for micro seconds to seconds
+#define TIME_TO_SLEEP 1200    				  //Time ESP32 will go to sleep (in seconds) 20 minutes = 1200 secs
+//definizioni per media
+#define AVG_MEASUREMENTS_AMOUNT 10	 	  //Amount of measurements
+#define AVG_MEASUREMENTS_DELAY	3000	 	//Amount of delay between measurements (in milliseconds)
+#define PREHEAT_TIME 10                 //Preheat time in minutes, 10-30 minutes is recommended
+//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
 
-RTC_DATA_ATTR int bootCount = 0;
-//§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
+RTC_DATA_ATTR int bootCount = 0;        //contatore di riavvii dopo lo sleep
+
+//++++++variabile per distinguere tra centralina mobile (true) o fissa (false)++++++++
+bool mobile_unit = true;
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 File root;
 WiFiClient client;
@@ -72,18 +85,16 @@ String pwd = "";
 String codice = "";
 String splash = "";
 String logpath = "";
-float hum, temp, pre, alt, VOC;
-float PM1, PM10, PM25;
-int NOx;
-int COx;
-//int luce;
-//int UVlight;
+float hum = 0.0;
+float temp = 0.0;
+float pre = 0.0;
+float VOC = 0.0;
+float PM1 = 0.0;
+float PM10 = 0.0;
+float PM25 = 0.0;
+int NOx = 0;
+int COx = 0;
 uint8_t buffer;
-
-
-//int tick = 0;
-//int logtick = 0;
-
 
 // per sensore PMS5003
 struct pms5003data {
@@ -95,7 +106,6 @@ struct pms5003data {
   uint16_t checksum;
 };
 struct pms5003data data;
-
 
 // per SDS SENSORE PM
 //int len = 0;
@@ -109,14 +119,13 @@ struct pms5003data data;
 // per sensore MICS-6814 multichannel
 float c1, c2, c3, c4, c5, c6, c7, c8;
 float MICS6814_NH3   = 0.0;
-float MICS6814_COB   = 0.0;
+float MICS6814_CO   = 0.0;
 float MICS6814_NO2   = 0.0;
 float MICS6814_C3H8  = 0.0;
 float MICS6814_C4H10 = 0.0;
 float MICS6814_CH4   = 0.0;
 float MICS6814_H2    = 0.0;
 float MICS6814_C2H5OH = 0.0;
-
 
 //// gestione dei DIP-SWITCH per settare indirizzi di trasmissione
 //int codice = 0;
@@ -125,14 +134,13 @@ float MICS6814_C2H5OH = 0.0;
 //int pin_3=0;
 //int pin_4=0;
 
-
 // variabili di stato
 bool SD_ok = false;
 bool rete_ok = false;
+bool ssid_ok = false;
 bool connesso_ok = false;
 bool dataora_ok = false;
 bool invio_ok = false;
-
 
 // variabili per gestione orario da server UDP
 String formattedDate = "";
@@ -142,8 +150,6 @@ String logvalue = "";
 
 unsigned long check_wifi = 30000;
 unsigned long timeout_connect = 0;
-
-//int FASE = 0;
 
 // sensore CO e calcolo PPM
 float VoltLev = 0.0;
@@ -157,20 +163,13 @@ float COppm = 0.0;
 String MACA = "";
 
 //configurazione sensori e funzionalità
-bool MQ7_run = true;
-bool MICS6814_run = true;
-//bool MICS4514_run = false;
+bool MICS6814_run;
+bool BME680_run;
 bool PMS_run = true;
+bool MQ7_run = false;
+//bool MICS4514_run = false;
 //bool SDS_run = false;
 //bool BME280_run = false;
-bool BME680_run = true;
-//bool light_run = false;
-//bool UV_run = false;
-
-
-//++++++variabile per distinguere tra centralina mobile (true) o fissa (false)++++++++
-bool mobile_unit = false;
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 byte mac[6];
 
@@ -178,10 +177,9 @@ byte mac[6];
 bool DEBBUG = false;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-//*****************************************************************
-//************** F U N Z I O N I   A U S I L I A R I E ************
-//*****************************************************************
 
+
+//+++++++++++++++++  I C O N E  D I  S I S T E M A  +++++++++++++++++
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char wifi1_icon16x16[] = {
   0b00000000, 0b00000000, //
@@ -201,7 +199,6 @@ unsigned char wifi1_icon16x16[] = {
   0b00000000, 0b00000000, //
   0b00000000, 0b00000000, //
 };
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char arrow_up_icon16x16[] = {
   0b10000000, 0b00000001, //        ##
@@ -221,7 +218,6 @@ unsigned char arrow_up_icon16x16[] = {
   0b11111000, 0b00011111, //    ##########
   0b11110000, 0b00001111, //     ########
 };
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char blank_icon16x16[] = {
   0b00000000, 0b00000000, //
@@ -241,7 +237,6 @@ unsigned char blank_icon16x16[] = {
   0b00000000, 0b00000000, //
   0b00000000, 0b00000000, //
 };
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char nocon_icon16x16[] = {
   0b00000000, 0b00000000, //
@@ -261,27 +256,6 @@ unsigned char nocon_icon16x16[] = {
   0b11100000, 0b00000011, //       #####
   0b00000000, 0b00000000, //
 };
-/*
-  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  unsigned char tool_icon16x16[] = {
-  0b00000000, 0b00000000, //
-  0b01100000, 0b00000000, //          ##
-  0b11100000, 0b00000000, //         ###
-  0b11000000, 0b00000001, //        ###
-  0b11000000, 0b00000001, //        ###
-  0b11100110, 0b00000001, //        ####  ##
-  0b11111110, 0b00000011, //       #########
-  0b11111100, 0b00000111, //      #########
-  0b11111000, 0b00001111, //     #########
-  0b11000000, 0b00011111, //    #######
-  0b10000000, 0b00111111, //   #######
-  0b00000000, 0b01111111, //  #######
-  0b00000000, 0b11111110, // #######
-  0b00000000, 0b11111100, // ######
-  0b00000000, 0b11111000, // #####
-  0b00000000, 0b01110000, //  ###
-  };
-*/
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char sd_icon16x16[] = {
   0b00000000, 0b00000000, //
@@ -301,7 +275,6 @@ unsigned char sd_icon16x16[] = {
   0b00011110, 0b00000011, //       ##   ####
   0b00000000, 0b00000000, //
 };
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 unsigned char clock_icon16x16[] = {
   0b00000000, 0b00000000, //
@@ -321,10 +294,17 @@ unsigned char clock_icon16x16[] = {
   0b11100000, 0b00000011, //       #####
   0b00000000, 0b00000000, //
 };
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+
+
+//*****************************************************************
+//************** F U N Z I O N I   A U S I L I A R I E ************
+//*****************************************************************
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void drawScrHead() { //disegna l'header dello schermo con tutte le icone
+
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x13_tf);
 
@@ -349,11 +329,61 @@ void drawScrHead() { //disegna l'header dello schermo con tutte le icone
   }
 
   u8g2.drawLine(0, 17, 127, 17);
+
 }
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+String floatToComma(float value) {    //Converts float values in strings with the decimal part separated from the integer part by a comma
 
+  String convert = String(value);
+  convert.replace(".", ",");
+  return convert;
 
+}
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void displayMeasures() { //prints data on the U8g2 screen, on four pages
+
+  if (DEBBUG) Serial.println("...aggiorno i dati del display...");
+
+  // pagina 1
+  drawScrHead();
+  u8g2.setCursor(5, 28); u8g2.print("Temp: " + floatToComma(temp));
+  u8g2.setCursor(5, 39); u8g2.print("Hum: " + floatToComma(hum));
+  u8g2.setCursor(5, 50); u8g2.print("Pre: " + floatToComma(pre));
+  u8g2.setCursor(5, 61); u8g2.print("CO: " + floatToComma(COppm));
+  u8g2.sendBuffer();
+  delay(5000);
+
+  // pagina 2
+  drawScrHead();
+  u8g2.setCursor(5, 28); u8g2.print("P25: " + floatToComma(PM25));
+  u8g2.setCursor(5, 39); u8g2.print("P10: " + floatToComma(PM10));
+  u8g2.setCursor(5, 50); u8g2.print("PM1: " + floatToComma(PM1));
+  u8g2.setCursor(5, 61); u8g2.print("VOC: " + floatToComma(VOC));
+  u8g2.sendBuffer();
+  delay(5000);
+
+  // pagina 3
+  drawScrHead();
+  u8g2.setCursor(5, 28); u8g2.print("COx: " + floatToComma(MICS6814_CO));
+  u8g2.setCursor(5, 39); u8g2.print("NOx: " + floatToComma(MICS6814_NO2));
+  u8g2.setCursor(5, 50); u8g2.print("NH3: " + floatToComma(MICS6814_NH3));
+  u8g2.setCursor(5, 61); u8g2.print("H2: " + floatToComma(MICS6814_H2));
+  u8g2.sendBuffer();
+  delay(5000);
+
+  // pagina 4
+  drawScrHead();
+  u8g2.setCursor(5, 28); u8g2.print("CH4: " + floatToComma(MICS6814_CH4));
+  u8g2.setCursor(5, 39); u8g2.print("C3H8: " + floatToComma(MICS6814_C3H8));
+  u8g2.setCursor(5, 50); u8g2.print("C4H10: " + floatToComma(MICS6814_C4H10));
+  u8g2.setCursor(5, 61); u8g2.print("C2H5OH: " + floatToComma(MICS6814_C2H5OH));
+  u8g2.sendBuffer();
+  delay(5000);
+
+}// end of displayMeasures()
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void appendFile(fs::FS &fs, String path, String message) {
+
   if (DEBBUG) Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
@@ -367,11 +397,11 @@ void appendFile(fs::FS &fs, String path, String message) {
     if (DEBBUG) Serial.println("Append failed");
   }
   file.close();
+
 }
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void readFile(fs::FS &fs, const char * path) {
+
   Serial.printf("Reading file: %s\n", path);
 
   File file = fs.open(path);
@@ -385,11 +415,11 @@ void readFile(fs::FS &fs, const char * path) {
     Serial.write(file.read());
   }
   file.close();
+
 }
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void parseCommand(String comm) {
+
   String part1;
   String part2;
   String part3;
@@ -442,12 +472,10 @@ void parseCommand(String comm) {
     Serial.println("comando non riconosciuto");
   }
 
-
 }// fine parseCommand
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 boolean readPMSdata(Stream *s) {  //per PMS5003
+
   if (! s->available()) {
     return false;
   }
@@ -472,13 +500,6 @@ boolean readPMSdata(Stream *s) {  //per PMS5003
     sum += buffer[i];
   }
 
-  /* debugging
-    for (uint8_t i=2; i<32; i++) {
-    Serial.print("0x"); Serial.print(buffer[i], HEX); Serial.print(", ");
-    }
-    Serial.println();
-  */
-
   // The data comes in endian'd, this solves it so it works on all platforms
   uint16_t buffer_u16[15];
   for (uint8_t i = 0; i < 15; i++) {
@@ -495,11 +516,11 @@ boolean readPMSdata(Stream *s) {  //per PMS5003
   }
   // success!
   return true;
+
 }// fine readPMSdata()
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void print_wakeup_reason() {
+
   //Method to print the reason by which ESP32 has been awaken from sleep
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -512,11 +533,11 @@ void print_wakeup_reason() {
     case 5  : Serial.println("Wakeup caused by ULP program"); break;
     default : Serial.println("Wakeup was not caused by deep sleep"); break;
   }
+
 }//////////////
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 bool initializeSD() {
+
   if (!SD.begin()) {
     Serial.println("Errore lettore SD CARD!");
     return false;
@@ -544,8 +565,57 @@ bool initializeSD() {
   delay(300);
 
 }// fine funzione initializeSD()
-
-
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void scansioneWifi() {
+  for (int k = 0; k < 4; k++) {
+    Serial.println("scan start");
+    drawScrHead();
+    u8g2.drawStr(0, 30, "SCANSIONE della rete:");
+    u8g2.sendBuffer();
+    delay(100);
+    // WiFi.scanNetworks will return the number of networks found
+    int n = WiFi.scanNetworks();
+    Serial.println("scan done");
+    delay(300);
+    u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(3, 42, "SCANSIONE COMPLETATA"); u8g2.sendBuffer();
+    delay(1000);
+    if (n == 0) {
+      Serial.println("no networks found");
+      Serial.printf("%d retryes left\n", 3 - k);
+      u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(8, 55, "NESSUNA RETE!"); u8g2.sendBuffer();
+      if (k < 3) {
+        Serial.println("Trying again...");
+        drawScrHead();
+        u8g2.drawStr(35, 45, "RIPROVO...");
+        u8g2.sendBuffer();
+        delay(2000);
+        continue;
+      }
+      delay(1000);
+    } else {
+      Serial.print(n);
+      Serial.println(" networks found");
+      drawScrHead();
+      delay(200);
+      drawScrHead();
+      u8g2.setCursor(5, 35); u8g2.print("RETI TROVATE:"); u8g2.setCursor(95, 35); u8g2.print(String(n));
+      u8g2.sendBuffer();
+      delay(100);
+      for (int i = 0; i < n; ++i) {
+        // Print SSID and RSSI for each network found
+        Serial.print(i + 1); Serial.print(": ");
+        Serial.print(WiFi.SSID(i)); Serial.print(" ("); Serial.print(WiFi.RSSI(i)); Serial.print(")");
+        Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "---OPEN---" : "***");
+        if (WiFi.SSID(i) == ssid) {
+          ssid_ok = true;
+        }
+        delay(100);
+      }
+      Serial.println();
+      break;
+    }
+  }
+}
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 bool connessioneWifi() {
 
@@ -615,10 +685,9 @@ bool connessioneWifi() {
   }
 
 }// fine funzione connessioneWifi
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 String getMacAdr(byte* mc) {
+
   String macAdr = "";
   WiFi.macAddress(mc);
   macAdr += String(mc[0], HEX); macAdr += ":";
@@ -647,11 +716,49 @@ String getMacAdr(byte* mc) {
   }
   MACA = macAdr;
   return macAdr;
+
 } //fine getMacAdr
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void initDateTime() {
 
+  if (connesso_ok) {
+    // Inizializzo il clientNTPClient per sincronizzare data/ora
+    if (DEBBUG) Serial.println("...inizializzo il server dell'ora...");
+    timeClient.begin();
+    timeClient.setTimeOffset(3600); // Set offset time in seconds to adjust...// GMT +1 = 3600
+    dataora_ok = true;
+    upDateTime();
+  } else {
+    Serial.println("Errore nell'inizializzazione del server orario, connessione assente!");
+    dataora_ok = false;
+  }
+  delay(500);
 
+}
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void upDateTime() {
+
+  dayStamp = "";
+  timeStamp = "";
+  long start = millis();
+  if (connesso_ok && dataora_ok) {
+    if (DEBBUG) Serial.println("...aggiorno data e ora...");
+    // aggiorno data e ora ogni LOOP
+    while ((!timeClient.update()) && (millis() - start <= 10000)) {
+      if (DEBBUG) Serial.println("...aspetto l'ora aggiornata...");
+      timeClient.forceUpdate();
+      delay(300);
+    }
+    getDateTimeStamps();
+    delay(500);
+  } else {
+    Serial.println("Errore nell'aggiornamento di data e ora!");
+  }
+
+}
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 void getDateTimeStamps() {    // Made from original getFormattedDate() from previous NTPClient package
+
   unsigned long rawTime = timeClient.getEpochTime() / 86400L;  // in days
   unsigned long days = 0, year = 1970;
   uint8_t month;
@@ -676,39 +783,24 @@ void getDateTimeStamps() {    // Made from original getFormattedDate() from prev
   //bulding final dayStamp and timeStamp strings
   dayStamp = String(year) + "-" + monthStr + "-" + dayStr;//Serial.print("DATE: ");//Serial.println(dayStamp);
   timeStamp = timeClient.getFormattedTime();//Serial.print("HOUR: ");//Serial.println(timeStamp);
+
 }
-
-
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-String floatToComma(float value) {    //Converts float values in strings with the decimal part separated from the integer part by a comma
-  String convert = String(value);
-  convert.replace(".", ",");
-  return convert;
-}
+
 
 
 //*****************************************************************
 //******************* S E T U P ***********************************
 //*****************************************************************
-void setup() {
-  //inizializzo variabili ++++++++++++++++++++++++++++++++++
-  COx = 0;
-  COppm = 0;
-  temp = 0;
-  hum = 0;
-  pre = 0;
-  alt = 0;
-  VOC = 0;
-  PM1 = 0;
-  PM25 = 0;
-  PM10 = 0;
 
-  // INIZIALIZZO DIP-SWITCH ++++++++++++++++++++++++++++++++++++
-  //  pinMode(33,INPUT);
-  //  pinMode(25,INPUT);
-  //  pinMode(26,INPUT);
-  //  pinMode(27,INPUT);
-  //  codice=0;
+void setup() {
+
+  //INIZIALIZZO DIP-SWITCH ++++++++++++++++++++++++++++++++++++
+  //pinMode(33,INPUT);
+  //pinMode(25,INPUT);
+  //pinMode(26,INPUT);
+  //pinMode(27,INPUT);
+
 
   // INIZIALIZZO SCHERMO OLED E SERIALE++++++++++++++++++++++++++++++++++++
   u8g2.begin();
@@ -747,7 +839,7 @@ void setup() {
         command += root.readStringUntil('\n*');
       }// fine WHILE
       root.close();
-      Serial.println(command);
+      if (DEBBUG) Serial.println(command);
       parseCommand(command);
       rete_ok = true;
       u8g2.setFont(u8g2_font_t0_17b_mf);
@@ -777,6 +869,49 @@ void setup() {
   }// fine IF ramo ELSE+++++++++++++++++++++++++++++++++++++++
 
 
+  // fase di SCANSIONE DELLA RETE +++++++++++++++++++++++++++++++++++++++++++++++++++
+  // Set WiFi to station mode and disconnect from an AP if it was previously connected
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  int wifipow = WiFi.getTxPower();
+  Serial.printf("WiFi transmission power is %d [MIN: -4(-1dBm); MAX: 78(19.5dBm)]\n", wifipow);
+  delay(1000);
+  if (rete_ok) {
+    for (int m = 0; m < 4; m++) {
+      scansioneWifi();
+      if (rete_ok && ssid_ok) {
+        Serial.print(ssid); Serial.println(" trovata!");
+        u8g2.setFont(u8g2_font_6x13_tf);
+        u8g2.setCursor(5, 55); u8g2.print(ssid + " OK!");
+        u8g2.sendBuffer();
+        delay(4000);
+        connesso_ok = connessioneWifi(); //lancio la connessione wifi
+        initDateTime(); //lancio connessione a server orario e sincronizzo l'ora
+        break;
+      } else if (!ssid_ok) {
+        Serial.print("Errore! "); Serial.print(ssid); Serial.println(" non trovata!");
+        u8g2.setFont(u8g2_font_6x13_tf);
+        u8g2.setCursor(5, 55); u8g2.print("NO " + ssid + "!");
+        u8g2.sendBuffer();
+        delay(4000);
+        if (m < 3) {
+          Serial.println("Riprovo...");
+          drawScrHead();
+          u8g2.drawStr(35, 45, "RIPROVO...");
+          u8g2.sendBuffer();
+          delay(3000);
+          continue;
+        }
+        Serial.println("Nessuna connessione!"); Serial.println();
+        drawScrHead();
+        u8g2.setCursor(5, 45); u8g2.print("NESSUNA CONNESSIONE!");
+        u8g2.sendBuffer();
+        delay(3000);
+      }
+    }
+  }//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
   // controllo presenza del csv di log su SD, se non c'è lo creo e lo intesto +++++++++++++++++++++++++++++++++++++
   if (SD_ok == true) {
     logpath = "/LOG_ILARIA_" + codice + ".csv";
@@ -785,15 +920,18 @@ void setup() {
       File filecsv = SD.open(logpath, FILE_WRITE);
       if (filecsv) {
         filecsv.close();
-        String headertext = "File di log della centralina: " + codice;
+        String headertext = "File di log della centralina: " + codice + " | Versione firmware: " + VERSION;
         appendFile(SD, logpath, headertext);
         appendFile(SD, logpath, "Date;Time;Temp;Hum;Pre;CO;COx;NOx;PM25;PM10;PM1;VOC;NH3;C3H8;C4H10;CH4;H2;C2H5OH");
         Serial.println("File di log creato!");
+        Serial.println();
       } else {
         Serial.println("Errore nel creare il file di log!");
+        Serial.println();
       }
     } else {
       Serial.println("File di log presente!");
+      Serial.println();
     }
   }//fine controllo
 
@@ -806,203 +944,138 @@ void setup() {
     //visualizza la ragione del reboot
     print_wakeup_reason();
     //  First we configure the wake up source
-    //  We set our ESP32 to wake up every 5 seconds
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-    Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " Seconds");
+    Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " seconds");
+    Serial.println();
   } else {
     Serial.println("Centralina configurata come mobile, disattivo lo sleep...");
+    Serial.println();
   }
   //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-/*
-  // +++++++  ATTIVO ALIMENTAZIONE  TUTTI I SENSORI+++++++++++++++
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH); // accendo il MOSFET
-  delay(500);
-  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-*/
+  /*
+    // +++++++  ATTIVO ALIMENTAZIONE  TUTTI I SENSORI+++++++++++++++
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH); // accendo il MOSFET
+    delay(500);
+    //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  */
 
-  Serial.println();
-
-
+  // +++++++ INIZIALIZZO TUTTI I SENSORI, SE PRESENTI +++++++++++++++
   // inizializzo BME680++++++++++++++++++++++++++++++++++++++++++
-  if (!bme680.begin()) {
-    Serial.println("sensore BME680 non connesso");
-    BME680_run = false;
-  } else {
-    Serial.println("sensore BME680 connesso, abilito...");
+  if (bme680.begin()) {
+    Serial.println("Sensore BME680 connesso");
+    Serial.println();
     BME680_run = true;
-  }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  
-  // messaggio MQ-7++++++++++++++++++++++++++++++++++++++++++++
-  if (MQ7_run) {
-    Serial.println("sensore MQ-7 abilitato");
+    bme680.setGasHeater(200, 150); // 200*C for 150 ms
   } else {
-    Serial.println("sensore MQ-7 disabilitato");
-  }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  
-  //inizializzo SENSORE PM++++++++++++++++++++++++++++++++++++++++++
-  //definizione: void begin(unsigned long baud, uint32_t config=SERIAL_8N1, int8_t rxPin=-1, int8_t txPin=-1, bool invert=false);
-  // SERIALE PER PMS: con WROVER NON USARE SERIAL 2 sui pin 16 e 17, va in crash!
-  if (PMS_run) {
-    Serial.println("sensore PMS5003 abilitato, inizializzo...");
-    PMSerial.begin(9600, SERIAL_8N1, 14, 12); // baud, type, ESP_RX, ESP_TX
-    delay(1500);
-  } else {
-    Serial.println("sensore PMS5003 disabilitato");
+    Serial.println("Sensore BME680 non connesso");
+    Serial.println();
+    BME680_run = false;
   }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
   //inizializzo SENSORE MICS6814++++++++++++++++++++++++++++++++++++
-  if (MICS6814_run) {
-    Serial.println("sensore MICS6814 abilitato, inizializzo...");
-    gas.begin(); // the default I2C address of the slave is 0x04
-    gas.powerOn(); // accensione
-    delay(500);
+  if (gas.begin()) { // Connect to sensor using default I2C address (0x04)
+    Serial.println("Sensore MICS6814 connesso, inizializzo...");
+    MICS6814_run = true;
+    // accensione riscaldatore e led
+    gas.powerOn();
+    gas.ledOn();
+    Serial.println("MICS6814: valori delle resistenze di base:");
+    Serial.print("OX: "); Serial.print(gas.getBaseResistance(CH_OX));
+    Serial.print(" ; RED: "); Serial.print(gas.getBaseResistance(CH_RED));
+    Serial.print(" ; NH3: "); Serial.println(gas.getBaseResistance(CH_NH3));
+    Serial.println();
   } else {
-    Serial.println("sensore MICS6814 disabilitato");
+    Serial.println("Sensore MICS6814 non connesso");
+    Serial.println();
+    MICS6814_run = false;
   }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-/*
-  // messaggio SDS++++++++++++++++++++++++++++++++++++++++++++
-  if (SDS_run) {
-    Serial.println("sensore SDS abilitato");
+
+  //inizializzo SENSORE PM++++++++++++++++++++++++++++++++++++++++++
+  //definizione: void begin(unsigned long baud, uint32_t config=SERIAL_8N1, int8_t rxPin=-1, int8_t txPin=-1, bool invert=false);
+  // SERIALE PER PMS: con WROVER NON USARE SERIAL 2 sui pin 16 e 17, va in crash!
+  if (PMS_run) {
+    Serial.println("Sensore PMS5003 abilitato, inizializzo...");
+    Serial.println();
+    PMSerial.begin(9600, SERIAL_8N1, 14, 12); // baud, type, ESP_RX, ESP_TX
+    delay(1500);
   } else {
-    Serial.println("sensore SDS disabilitato");
+    Serial.println("Sensore PMS5003 disabilitato");
+    Serial.println();
   }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-*/
-/*
-  // inizializzo BME280++++++++++++++++++++++++++++++++++++++++++++
-  if (!bme.begin(BME280_ADD)) {
-    Serial.println("sensore BME280 non connesso");
-    BME280_run = false;
+
+
+  // messaggio MQ-7++++++++++++++++++++++++++++++++++++++++++++
+  if (MQ7_run) {
+    Serial.println("Sensore MQ-7 abilitato");
+    Serial.println();
   } else {
-    Serial.println("sensore BME280 connesso, abilito...");
-    BME280_run = true;
+    Serial.println("Sensore MQ-7 disabilitato");
+    Serial.println();
   }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-*/
-/*
-  // MICS4514 - GESTIONE riscaldatore: PRE --> D34++++++++++++++++++++
-  if (MICS4514_run) {
-    Serial.println("sensore MICS4514 abilitato");
-    pinMode(34, OUTPUT);
-    digitalWrite(34, HIGH); // accendo il riscaldatore
-  } else {
-    Serial.println("sensore MICS4514 disabilitato");
-  }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-*/
 
-  Serial.println();
-
-
-  // fase di SCANSIONE DELLA RETE +++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  // Set WiFi to station mode and disconnect from an AP if it was previously connected
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  int wifipow = WiFi.getTxPower();
-  Serial.printf("WiFi transmission power is %d [MIN: -4(-1dBm); MAX: 78(19.5dBm)]\n", wifipow);
-  delay(1000);
-  Serial.println("scan start");
-
-  drawScrHead();
-  u8g2.drawStr(0, 30, "SCANSIONE della rete:");
-  u8g2.sendBuffer();
-  delay(100);
-
-  // WiFi.scanNetworks will return the number of networks found
-  int n = WiFi.scanNetworks();
-  Serial.println("scan done");
-  delay(300);
-  u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(3, 42, "SCANSIONE COMPLETATA"); u8g2.sendBuffer();
-  delay(1000);
-  if (n == 0) {
-    Serial.println("no networks found");
-    u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(8, 55, "NESSUNA RETE!"); u8g2.sendBuffer();
-    delay(1000);
-
-  } else {
-    Serial.print(n);
-    Serial.println(" networks found");
-    drawScrHead();
-    delay(200);
-    drawScrHead();
-    u8g2.setCursor(5, 35); u8g2.print("Reti trovate:"); u8g2.setCursor(95, 35); u8g2.print(String(n));
-    u8g2.sendBuffer();
-    delay(100);
-    for (int i = 0; i < n; ++i) {
-      // Print SSID and RSSI for each network found
-      Serial.print(i + 1); Serial.print(": ");
-      Serial.print(WiFi.SSID(i)); Serial.print(" ("); Serial.print(WiFi.RSSI(i)); Serial.print(")");
-      Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "---OPEN---" : "***");
-      delay(100);
-      // u8g2.setFont(u8g2_font_6x13_tf);u8g2.drawStr(8, (42+(i*12)), WiFi.SSID(i).c_str());u8g2.sendBuffer(); commentata, causa problemi di allineamento sullo schermo
-    }
-  }
-  Serial.println("");
-
-  // Wait a bit before scanning again
-  delay(2000);
-
-
-  // fase di CONNESSIONE ALLA RETE, solo se ho dati di connessione++++++++++++++++++++
-
-  if (rete_ok) {
-    connesso_ok = connessioneWifi();
-  }// fine if se rete presente+++++++++++++++++++++++++++++++++++++++++++++
-
-
-  //+++++++++++++++++++ lancio connessione a server orario e sincronizzo l'ora
-  if (connesso_ok) {
-    dataora_ok = true;
-    // Inizializzo il clientNTPClient per sincronizzare data/ora
-    timeClient.begin();
-    timeClient.setTimeOffset(3600); // Set offset time in seconds to adjust...// GMT +1 = 3600
-  } else {
-    dataora_ok = false;  // fine IF rete presente
-  }//+++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  //FASE = 10;
-  delay(500);
-
+  /*
+    // messaggio SDS++++++++++++++++++++++++++++++++++++++++++++
+    if (SDS_run) {
+      Serial.println("sensore SDS abilitato");
+    } else {
+      Serial.println("sensore SDS disabilitato");
+    }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  */
+  /*
+    // inizializzo BME280++++++++++++++++++++++++++++++++++++++++++++
+    if (!bme.begin(BME280_ADD)) {
+      Serial.println("sensore BME280 non connesso");
+      BME280_run = false;
+    } else {
+      Serial.println("sensore BME280 connesso, abilito...");
+      BME280_run = true;
+    }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  */
+  /*
+    // MICS4514 - GESTIONE riscaldatore: PRE --> D34++++++++++++++++++++
+    if (MICS4514_run) {
+      Serial.println("sensore MICS4514 abilitato");
+      pinMode(34, OUTPUT);
+      digitalWrite(34, HIGH); // accendo il riscaldatore
+    } else {
+      Serial.println("sensore MICS4514 disabilitato");
+    }//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  */
 
   // PRERISCALDAMENTO SENSORI +++++++++++++++++++++++++++++++++++++++++++
-    // MESSAGGIO seriale
-    Serial.println("Preriscaldamento sensori in corso, attendere...");
-    // ATTESA
-    for (int i = 60 * PRE_HEAT_TIME; i > 0; i--) {
-      Serial.print(i / 60);
-      Serial.print(":");
-      Serial.println(i % 60);
-      String minuti = "ATTENDERE " + String(i / 60) + ":" + String(i % 60) + " MIN.";
-      drawScrHead();
-      u8g2.drawStr(5, 35, "Preriscaldamento...");
-      u8g2.drawStr(5, 55, minuti.c_str());
-      u8g2.sendBuffer();
-      delay(1000);
-    }
+  // MESSAGGIO seriale
+  Serial.println("Preriscaldamento sensori in corso, attendere...");
+  // ATTESA
+  for (int i = 60 * PREHEAT_TIME; i > 0; i--) {
+    Serial.print(i / 60);
+    Serial.print(":");
+    Serial.println(i % 60);
+    drawScrHead();
+    u8g2.setCursor(5, 35); u8g2.print("Preriscaldamento...");
+    u8g2.setCursor(8, 55); u8g2.print("ATTENDI " + String(i / 60) + ":" + String(i % 60) + " MIN.");
+    u8g2.sendBuffer();
+    delay(1000);
+  }
+  Serial.println();
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 
 }// fine SETUP
 
 
 
-
-
-
-
-
 //*************************************************************************
-//*************************************************************************
+//*************************  L O O P  *************************************
 //*************************************************************************
 void loop() {
 
   delay(100);
 
   if (DEBBUG) {
+    Serial.print("codice: --> "); Serial.println(codice);
     Serial.print("SD_ok: --> "); Serial.println(SD_ok);
     Serial.print("rete_ok: --> "); Serial.println(rete_ok);
     Serial.print("connesso_ok: --> "); Serial.println(connesso_ok);
@@ -1012,10 +1085,10 @@ void loop() {
     //Serial.print("stato pin_2 (GPIO25): ");Serial.println(pin_2);
     //Serial.print("stato pin_3 (GPIO26): ");Serial.println(pin_3);
     //Serial.print("stato pin_4 (GPIO27): ");Serial.println(pin_4);
-    //Serial.print("stato codice: ");Serial.println(codice);
   }
 
 
+  //------------------------------------------------------------------------
   //++++++++++++++++  AGGIORNAMENTO SENSORI  ++++++++++++++++++++++++++++++
   //messaggio seriale
   Serial.println("Sto effettuando le misurazioni...");
@@ -1024,15 +1097,13 @@ void loop() {
   u8g2.drawStr(15, 35, "Sto effettuando");
   u8g2.drawStr(15, 55, "le misurazioni...");
   u8g2.sendBuffer();
-  
-  //ciclo di campionamento
+
+  //ciclo di campionamento+++++++++++++++++++++++++++++++++++++++++++++++++
   for (int z = 0; z < AVG_MEASUREMENTS_AMOUNT; z++) {
-    if (DEBBUG) Serial.printf("Misurazione numero %d\n", z+1);
+    if (DEBBUG) Serial.printf("Misurazione numero %d\n", z + 1);
 
 
-    //------------------------------------------------------------------------
-    //if (FASE == 10) {  //+++++++++  AGGIORNAMENTO SENSORE CO MQ7  ++++++++++++
-
+    //+++++++++  AGGIORNAMENTO SENSORE CO MQ7  ++++++++++++
     if (MQ7_run) {
       if (DEBBUG) Serial.println("...campiono MQ7...");
       // gestione dato ANALOG da sensore CO MQ7
@@ -1048,37 +1119,28 @@ void loop() {
       LogCOppm = (log10(ratio) * (k1)) + k2;
       COppm += pow(10, LogCOppm);
     }
-
-    //FASE = 15;
-
-    //}// fine FASE 10   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
+    //+++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
-    //------------------------------------------------------------------------
-    //if (FASE == 15) {  //+++++++++  AGGIORNAMENTO SENSORE MICS6814  ++++++++++++
-
+    //+++++++++  AGGIORNAMENTO SENSORE MICS6814  ++++++++++++
     if (MICS6814_run) {
       if (DEBBUG) Serial.println("...campiono MICS6814...");
       // gestione dati sensore su I2C
-      c1 = gas.measure_NH3();    if(c1>=0) MICS6814_NH3 += c1;
-      c2 = gas.measure_CO();     if(c2>=0) MICS6814_COB += c2;
-      c3 = gas.measure_NO2();    if(c3>=0) MICS6814_NO2 += c3;
-      c4 = gas.measure_C3H8();   if(c4>=0) MICS6814_C3H8 += c4;
-      c5 = gas.measure_C4H10();  if(c5>=0) MICS6814_C4H10 += c5;
-      c6 = gas.measure_CH4();    if(c6>=0) MICS6814_CH4 += c6;
-      c7 = gas.measure_H2();     if(c7>=0) MICS6814_H2 += c7;
-      c8 = gas.measure_C2H5OH(); if(c8>=0) MICS6814_C2H5OH += c8;
+      c1 = gas.measureCO();     if (c1 >= 0) MICS6814_CO += c1;
+      c2 = gas.measureNO2();    if (c2 >= 0) MICS6814_NO2 += c2;
+      c3 = gas.measureNH3();    if (c3 >= 0) MICS6814_NH3 += c3;
+      c4 = gas.measureC3H8();   if (c4 >= 0) MICS6814_C3H8 += c4;
+      c5 = gas.measureC4H10();  if (c5 >= 0) MICS6814_C4H10 += c5;
+      c6 = gas.measureCH4();    if (c6 >= 0) MICS6814_CH4 += c6;
+      c7 = gas.measureH2();     if (c7 >= 0) MICS6814_H2 += c7;
+      c8 = gas.measureC2H5OH(); if (c8 >= 0) MICS6814_C2H5OH += c8;
     }
-    delay (100);
-    //FASE = 20;
-
-    //}// fine FASE 15   //+++++++++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
+    delay (300);
+    //+++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
-    //------------------------------------------------------------------------
-    if (PMS_run) {  //+++++++++  AGGIORNAMENTO SENSORE PMS5003  +++++++++++
+    //+++++++++  AGGIORNAMENTO SENSORE PMS5003  +++++++++++
+    if (PMS_run) {
       if (DEBBUG) Serial.println("...campiono PMS5003...");
       if (readPMSdata(&PMSerial)) {
         // reading data was successful!
@@ -1098,33 +1160,28 @@ void loop() {
           delay(300);
         }// fine IF DEBBUG
       }//fine IF read...
-
-      //FASE = 40;
-
-    }// fine FASE 35   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
+    }
+    //++++++++++++++++++++++++++++++++++++++++++++++
 
 
-    //------------------------------------------------------------------------
-    if (BME680_run) {  //+++++++++  AGGIORNAMENTO SENSORE BME680  ++++++++++++
+    //+++++++++  AGGIORNAMENTO SENSORE BME680  ++++++++++++
+    if (BME680_run) {
       if (DEBBUG) Serial.println("...campiono BME680...");
       // Set up oversampling and filter initialization
       bme680.setTemperatureOversampling(BME680_OS_8X);
       bme680.setHumidityOversampling(BME680_OS_2X);
       bme680.setPressureOversampling(BME680_OS_4X);
       bme680.setIIRFilterSize(BME680_FILTER_SIZE_3);
-      bme680.setGasHeater(200, 150); // 320*C for 150 ms
+      bme680.setGasHeater(200, 150); // 200*C for 150 ms
       delay(300);
       if (! bme680.performReading()) {
         Serial.println("Failed to perform reading :(");
         //return;
       }
-      
       temp += bme680.temperature;
       hum += bme680.humidity;
       pre += bme680.pressure / 100.0;
       VOC += bme680.gas_resistance / 1000.0;
-      
       if (DEBBUG) {
         Serial.print("Temperature = "); Serial.print(bme680.temperature); Serial.println(" *C");
         Serial.print("Pressure = "); Serial.print(bme680.pressure / 100.0); Serial.println(" hPa");
@@ -1132,253 +1189,189 @@ void loop() {
         Serial.print("Gas = "); Serial.print(bme680.gas_resistance / 1000.0); Serial.println(" KOhms");
         Serial.println();
       }
-      
-      //FASE = 55;
-    }// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
-
-/*
-    //------------------------------------------------------------------------
-    //if (FASE == 20) {  //+++++++++  AGGIORNAMENTO SENSORE MICS4514 +++++++++++++++
-    if (MICS4514_run) {
-      if (DEBBUG) Serial.println("...campiono MICS4514...");
-      // gestione dato da MICS4514
-      NOx += analogRead(36);//  Serial.print("Livello NOx = "); Serial.println(NOx);
-      COx += analogRead(39);//  Serial.print("Livello COx = "); Serial.println(COx);
-      delay(10);
     }
-    //FASE = 30;
-    //}// fine FASE 20   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
-*/
-/*
-    //------------------------------------------------------------------------
-    //if (FASE == 30) {  //+++++++++  AGGIORNAMENTO SENSORE PM SDS021 ++++++++++
-    
-    if (SDS_run) {
-      if (DEBBUG) Serial.println("...campiono SDS021...");
-      len = 0;
-      pm10_serial = 0;
-      pm25_serial = 0;
-      checksum_is;
-      checksum_ok = 0;
-      oterror = 1;
-      // controllo il sensore PM...
-      while ((PMSerial.available() > 0) && (PMSerial.available() >= (10 - len))) {
-        buffer = PMSerial.read();
-        value = int(buffer);
-        switch (len) {
-          case (0): if (value != 170) {
-              len = -1;
-            }; break;
-          case (1): if (value != 192) {
-              len = -1;
-            }; break;
-          case (2): pm25_serial = value; checksum_is = value; break;
-          case (3): pm25_serial += (value << 8); checksum_is += value; break;
-          case (4): pm10_serial = value; checksum_is += value; break;
-          case (5): pm10_serial += (value << 8); checksum_is += value; break;
-          case (6): checksum_is += value; break;
-          case (7): checksum_is += value; break;
-          case (8): if (value == (checksum_is % 256)) {
-              checksum_ok = 1;
-            } else {
-              len = -1;
-            }; break;
-          case (9): if (value != 171) {
-              len = -1;
-            }; break;
-        }// fine switch case
-        len++;
-        if (len == 10 && checksum_ok == 1) {
-          PM1 += (float)0.0;
-          PM10 += (float)pm10_serial / 10.0; //Serial.print("PM10 = "); Serial.println(PM10);
-          PM25 += (float)pm25_serial / 10.0; //Serial.print("PM2.5 = "); Serial.println(PM25);
-          len = 0; checksum_ok = 0;
-          pm10_serial = 0.0;
-          pm25_serial = 0.0;
-          checksum_is = 0;
-          oterror = 0;
-          //buffer=0;
-        }// fine IF
-      }// fine while
+    //++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-    }// fine IF SDS
-    
-      //if (PMS_run) {
-      //FASE = 35;
-      //} else {
-      //FASE = 40;
-      //}
-    
-    //}// fine FASE 30   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
-*/
-/*
-    //------------------------------------------------------------------------
-    //if (FASE == 40) {  //+++++++++  AGGIORNAMENTO SENSORE BME280  ++++++++++++
-    if (BME280_run) {
-      if (DEBBUG) Serial.println("...campiono BME280...");
-      // gestione sensore BME280
-      temp += bme.readTemperature();
-      hum += bme.readHumidity();
-      pre += bme.readPressure() / 100.0F;
-      alt += bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
-    }
-    
-      //if (BME680_run) {
-      //FASE = 45;
-      //} else {
-      //FASE = 50;
-      //}
-    
-    //}// fine FASE 40   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
-*/
-/*
-    //------------------------------------------------------------------------
-    if (FASE == 50) {  //+++++++++  AGGIORNAMENTO SENSORE luce e UV  +++++++++
-      if (DEBBUG) Serial.println("...sono in fase 50...");
-      luce = 333;
-      UVlight = 444;
-      /////////////////
-      FASE = 60;
-    }// fine FASE 50   //++++++++++++++++++++++++++++++++++++++++++++++
-    //------------------------------------------------------------------------
-*/
+    /*
+        //+++++++++  AGGIORNAMENTO SENSORE MICS4514 +++++++++++++++
+        if (MICS4514_run) {
+          if (DEBBUG) Serial.println("...campiono MICS4514...");
+          // gestione dato da MICS4514
+          NOx += analogRead(36);//  Serial.print("Livello NOx = "); Serial.println(NOx);
+          COx += analogRead(39);//  Serial.print("Livello COx = "); Serial.println(COx);
+          delay(10);
+        }
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    */
+    /*
+        //+++++++++  AGGIORNAMENTO SENSORE PM SDS021 ++++++++++
+        if (SDS_run) {
+          if (DEBBUG) Serial.println("...campiono SDS021...");
+          len = 0;
+          pm10_serial = 0;
+          pm25_serial = 0;
+          checksum_is;
+          checksum_ok = 0;
+          oterror = 1;
+          // controllo il sensore PM...
+          while ((PMSerial.available() > 0) && (PMSerial.available() >= (10 - len))) {
+            buffer = PMSerial.read();
+            value = int(buffer);
+            switch (len) {
+              case (0): if (value != 170) {
+                  len = -1;
+                }; break;
+              case (1): if (value != 192) {
+                  len = -1;
+                }; break;
+              case (2): pm25_serial = value; checksum_is = value; break;
+              case (3): pm25_serial += (value << 8); checksum_is += value; break;
+              case (4): pm10_serial = value; checksum_is += value; break;
+              case (5): pm10_serial += (value << 8); checksum_is += value; break;
+              case (6): checksum_is += value; break;
+              case (7): checksum_is += value; break;
+              case (8): if (value == (checksum_is % 256)) {
+                  checksum_ok = 1;
+                } else {
+                  len = -1;
+                }; break;
+              case (9): if (value != 171) {
+                  len = -1;
+                }; break;
+            }// fine switch case
+            len++;
+            if (len == 10 && checksum_ok == 1) {
+              PM1 += (float)0.0;
+              PM10 += (float)pm10_serial / 10.0; //Serial.print("PM10 = "); Serial.println(PM10);
+              PM25 += (float)pm25_serial / 10.0; //Serial.print("PM2.5 = "); Serial.println(PM25);
+              len = 0; checksum_ok = 0;
+              pm10_serial = 0.0;
+              pm25_serial = 0.0;
+              checksum_is = 0;
+              oterror = 0;
+              //buffer=0;
+            }// fine IF
+          }// fine while
 
-    if (z < AVG_MEASUREMENTS_AMOUNT-1) {
-      if (DEBBUG) Serial.printf("Aspetto %d secondi per fare la prossima misurazione\n", AVG_MEASUREMENTS_DELAY/1000);
+        }// fine IF SDS
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    */
+    /*
+        //+++++++++  AGGIORNAMENTO SENSORE BME280  +++++++++++++++++++++
+        if (BME280_run) {
+          if (DEBBUG) Serial.println("...campiono BME280...");
+          // gestione sensore BME280
+          temp += bme.readTemperature();
+          hum += bme.readHumidity();
+          pre += bme.readPressure() / 100.0F;
+          alt += bme.readAltitude(SEALEVELPRESSURE_HPA + 5);
+        }
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    */
+
+    if (z < AVG_MEASUREMENTS_AMOUNT - 1) {
+      if (DEBBUG) Serial.printf("Aspetto %d secondi per fare la prossima misurazione\n", AVG_MEASUREMENTS_DELAY / 1000);
       delay(AVG_MEASUREMENTS_DELAY);
     }
-     
-    //FASE = 10;
-  }
-  // fine ciclo raccolta misure
+
+  }// fine ciclo di campionamento
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  //-----------------------------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 55) {	 //+++++++++  CALCOLO MEDIE VALORI  ++++++++++++
+  //+++++++++  CALCOLO MEDIE VALORI  +++++++++++++++++++++++++++++++++++++++
   if (DEBBUG) Serial.println("...calcolo le medie di tutti i valori...");
-  
+
   //+++++++++  MEDIA SENSORE CO MQ7  ++++++++++++
-  COppm /= AVG_MEASUREMENTS_AMOUNT;
-
+  if (MQ7_run) {
+    COppm /= AVG_MEASUREMENTS_AMOUNT;
+  }
   //+++++++++  MEDIA SENSORE MICS6814  ++++++++++++
-  MICS6814_NH3 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_COB /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_NO2 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_C3H8 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_C4H10 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_CH4 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_H2 /= AVG_MEASUREMENTS_AMOUNT;
-  MICS6814_C2H5OH /= AVG_MEASUREMENTS_AMOUNT;
-
+  if (MICS6814_run) {
+    MICS6814_CO /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_NO2 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_NH3 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_C3H8 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_C4H10 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_CH4 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_H2 /= AVG_MEASUREMENTS_AMOUNT;
+    MICS6814_C2H5OH /= AVG_MEASUREMENTS_AMOUNT;
+  }
   //+++++++++  MEDIA SENSORE BME680  ++++++++++++
-  temp /= AVG_MEASUREMENTS_AMOUNT;
-  hum /= AVG_MEASUREMENTS_AMOUNT;
-  pre /= AVG_MEASUREMENTS_AMOUNT;
-  VOC /= AVG_MEASUREMENTS_AMOUNT;
-
+  if (BME680_run) {
+    temp /= AVG_MEASUREMENTS_AMOUNT;
+    hum /= AVG_MEASUREMENTS_AMOUNT;
+    pre /= AVG_MEASUREMENTS_AMOUNT;
+    VOC /= AVG_MEASUREMENTS_AMOUNT;
+  }
   //+++++++++  MEDIA SENSORE PMS5003  ++++++++++++
-  PM1 /= AVG_MEASUREMENTS_AMOUNT;
-  PM25 /= AVG_MEASUREMENTS_AMOUNT;
-  PM10 /= AVG_MEASUREMENTS_AMOUNT;
-
-/*  
-  //+++++++++  MEDIA SENSORE MICS4514  ++++++++++++
-  for (int q = 0; q < sizeof(MICS4514); q++) {
-    MICS4514[q] /= AVG_MEASUREMENTS_AMOUNT;
+  if (PMS_run) {
+    PM1 /= AVG_MEASUREMENTS_AMOUNT;
+    PM25 /= AVG_MEASUREMENTS_AMOUNT;
+    PM10 /= AVG_MEASUREMENTS_AMOUNT;
   }
-  NOx = ;
-  COx = ;
-
-  //+++++++++  MEDIA SENSORE PM SDS021  ++++++++++++
-  for (int q = 0; q < sizeof(SDS021); q++) {
-    SDS021[q] /= AVG_MEASUREMENTS_AMOUNT;
-  }
-  PM1 = ;
-  PM10 = ;
-  PM25 = ;
-
-  //+++++++++  MEDIA SENSORE BME280  ++++++++++++
-  for (int q = 0; q < sizeof(BME280); q++) {
-    BME280[q] /= AVG_MEASUREMENTS_AMOUNT;
-  }
-  temp = ;
-  hum = ;
-  pre = ;
-  alt = ;
-*/
-
-  //FASE = 59;
-  //}
+  /*
+    //+++++++++  MEDIA SENSORE MICS4514  ++++++++++++
+    NOx = ;
+    COx = ;
+    //+++++++++  MEDIA SENSORE PM SDS021  ++++++++++++
+    PM1 = ;
+    PM10 = ;
+    PM25 = ;
+    //+++++++++  MEDIA SENSORE BME280  ++++++++++++
+    temp = ;
+    hum = ;
+    pre = ;
+    alt = ;
+  */
   //------------------------------------------------------------------------
   // fine calcolo medie
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 5) {  //+++++++++++ AGGIORNO DATA e ORA  +++++++++++++++++++
-  if (DEBBUG) Serial.println("...aggiorno data e ora...");
-  dayStamp = "";
-  timeStamp = "";
-  long start = millis();
-  if ((dataora_ok) && (connesso_ok)) {
-    // aggiorno data e ora ogni LOOP
-    while ((!timeClient.update()) && (millis() - start <= 10000)) {
-      if (DEBBUG) Serial.println("...aspetto l'ora aggiornata");
-      timeClient.forceUpdate();
-      delay(300);
-    }
-    getDateTimeStamps();
-    if (DEBBUG) Serial.println(dayStamp);
-    if (DEBBUG) Serial.println(timeStamp);
-    delay(500);
-  }// fine if dataora
-
-  //FASE = 10;
-  //}// fine FASE 5  //++++++++++++++++++++++++++++++++++++++++++++++
+  //+++++++++++ AGGIORNO DATA E ORA ++++++++++++++++++++++
+  upDateTime();
+  if (DEBBUG) Serial.println(dayStamp);
+  if (DEBBUG) Serial.println(timeStamp);
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 60) {  //+++++++++++++ LOG SU SERIALE  +++++++++++++++++++++++
+  //+++++++++++++ LOG SU SERIALE  +++++++++++++++++++++++
   if (DEBBUG) Serial.println("...log su seriale...");
-  
+
   // preparo schermata per LOG su SERIALE +++++++++++++++++++++++++++++++++++++
   Serial.println("\n--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
-  Serial.println("Date\t\tTime\t\tTemp\tHum\tPre\tCO\tCOx\tNOx\tPM25\tPM10\tPM1\tVOC\tNH3\tC3H8\t\tC4H10\t\tCH4\t\tH2\tC2H5OH");
+  Serial.println("Date          Time        Temp     Hum      Pre        CO      COx     NOx     PM25    PM10     PM1     VOC       NH3     C3H8     C4H10    CH4       H2     C2H5OH");
   Serial.println("--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------");
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  
   Serial.print(dayStamp);
-  Serial.print("\t"); Serial.print(timeStamp);
-  Serial.print("\t"); Serial.print(floatToComma(temp));
-  Serial.print("\t"); Serial.print(floatToComma(hum));
-  Serial.print("\t"); Serial.print(floatToComma(pre));
-  Serial.print("\t"); Serial.print(floatToComma(COppm));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_COB));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_NO2));
-  Serial.print("\t"); Serial.print(floatToComma(PM25));
-  Serial.print("\t"); Serial.print(floatToComma(PM10));
-  Serial.print("\t"); Serial.print(floatToComma(PM1));
-  Serial.print("\t"); Serial.print(floatToComma(VOC));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_NH3));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_C3H8));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_C4H10));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_CH4));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_H2));
-  Serial.print("\t"); Serial.print(floatToComma(MICS6814_C2H5OH));
-  Serial.print("\n\n");
-
-  //FASE = 70;
-  //}// fine FASE 60   //++++++++++++++++++++++++++++++++++++++++++++++
+  Serial.print("    "); Serial.print(timeStamp);
+  Serial.print("    "); Serial.print(floatToComma(temp));
+  Serial.print("    "); Serial.print(floatToComma(hum));
+  Serial.print("    "); Serial.print(floatToComma(pre));
+  Serial.print("    "); Serial.print(floatToComma(COppm));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_CO));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_NO2));
+  Serial.print("    "); Serial.print(floatToComma(PM25));
+  Serial.print("    "); Serial.print(floatToComma(PM10));
+  Serial.print("    "); Serial.print(floatToComma(PM1));
+  Serial.print("    "); Serial.print(floatToComma(VOC));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_NH3));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_C3H8));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_C4H10));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_CH4));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_H2));
+  Serial.print("    "); Serial.print(floatToComma(MICS6814_C2H5OH));
+  Serial.println("\n");
+  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 70) {  //+++++++++++++ LOG SU SD CARD  +++++++++++++++++++++++
-
+  //+++++++++++++ LOG SU SD CARD  ++++++++++++++++++++++++++++++++++++++++++
   SD.end(); //ricontrollo presenza effettiva della scheda SD
   delay(100);
   SD_ok = false;
@@ -1395,7 +1388,7 @@ void loop() {
     logvalue += floatToComma(hum); logvalue += ";";
     logvalue += floatToComma(pre); logvalue += ";";
     logvalue += floatToComma(COppm); logvalue += ";";
-    logvalue += floatToComma(MICS6814_COB); logvalue += ";";
+    logvalue += floatToComma(MICS6814_CO); logvalue += ";";
     logvalue += floatToComma(MICS6814_NO2); logvalue += ";";
     logvalue += floatToComma(PM25); logvalue += ";";
     logvalue += floatToComma(PM10); logvalue += ";";
@@ -1422,253 +1415,195 @@ void loop() {
     u8g2.drawXBMP(72, 0, 16, 16, blank_icon16x16);
     u8g2.sendBuffer();
   }
-
-  //FASE = 80;
-
-  //}// fine FASE 70   //++++++++++++++++++++++++++++++++++++++++++++++
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 80) {  //+++++++++++ AGGIORNO DISPLAY  +++++++++++++++++++++++
-  if (DEBBUG) Serial.println("...aggiorno i dati del display...");
-
-  // pagina 1
-  drawScrHead();
-  u8g2.drawStr(0, 28, "Te:");   u8g2.drawStr(68, 28, "HR:");
-  u8g2.drawStr(0, 40, "hPa:");  u8g2.drawStr(68, 40, "VOC:");
-  u8g2.drawStr(0, 52, "CO:");   u8g2.drawStr(68, 52, "PM1:");
-  u8g2.drawStr(0, 64, "P25:");  u8g2.drawStr(68, 64, "P10:");
-  u8g2.setCursor(25, 28);  u8g2.print(floatToComma(temp));    u8g2.setCursor(93, 28);  u8g2.print(floatToComma(hum));
-  u8g2.setCursor(25, 40);  u8g2.print(floatToComma(pre));     u8g2.setCursor(93, 40);  u8g2.print(floatToComma(VOC));
-  u8g2.setCursor(25, 52);  u8g2.print(floatToComma(COppm));   u8g2.setCursor(93, 52);  u8g2.print(floatToComma(PM1));
-  u8g2.setCursor(25, 64);  u8g2.print(floatToComma(PM25));    u8g2.setCursor(93, 64);  u8g2.print(floatToComma(PM10));
-  u8g2.sendBuffer();
-  delay(4000);
-
-  // pagina 2
-  drawScrHead();
-  u8g2.drawStr(0, 28, "COx:");
-  u8g2.drawStr(0, 40, "NOx:");
-  u8g2.drawStr(0, 52, "NH3:");
-  u8g2.drawStr(0, 64, "H2:");
-
-  u8g2.setCursor(40, 28);  u8g2.print(floatToComma(MICS6814_COB));
-  u8g2.setCursor(40, 40);  u8g2.print(floatToComma(MICS6814_NO2));
-  u8g2.setCursor(40, 52);  u8g2.print(floatToComma(MICS6814_NH3));
-  u8g2.setCursor(40, 64);  u8g2.print(floatToComma(MICS6814_H2));
-  u8g2.sendBuffer();
-  delay(3000);
-
-  // pagina 3
-  drawScrHead();
-  u8g2.drawStr(0, 28, "CH4:");
-  u8g2.drawStr(0, 40, "C3H8:");
-  u8g2.drawStr(0, 52, "C4H10:");
-  u8g2.drawStr(0, 64, "C2H5OH:");
-
-  u8g2.setCursor(50, 28);  u8g2.print(floatToComma(MICS6814_CH4));
-  u8g2.setCursor(50, 40);  u8g2.print(floatToComma(MICS6814_C3H8));
-  u8g2.setCursor(50, 52);  u8g2.print(floatToComma(MICS6814_C4H10));
-  u8g2.setCursor(50, 64);  u8g2.print(floatToComma(MICS6814_C2H5OH));
-  u8g2.sendBuffer();
-  delay(3000);
-
-  //FASE = 90;
-
-  //}// fine FASE 80   //++++++++++++++++++++++++++++++++++++++++++++++
+  //+++++++++++ AGGIORNO DISPLAY  ++++++++++++++++++++++++++++++++++++++++++
+  displayMeasures();
+  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 90) {  //+++++++++++ CHECK connessione - RICONNESSIONE  ++++++
+  //+++++++++++ CHECK connessione - RICONNESSIONE  +++++++++++++++++++++
+  if (WiFi.status() != WL_CONNECTED && rete_ok) {  // dentro se devo ritentare una connessione
+    if (DEBBUG) Serial.println("...ritento la connessione...");
+    connesso_ok = false;
+    dataora_ok = false;
+    WiFi.disconnect();
+    u8g2.drawXBMP(52, 0, 16, 16, blank_icon16x16);
+    u8g2.drawXBMP(112, 0, 16, 16, nocon_icon16x16);
+    u8g2.sendBuffer();
+    delay(2000);
+    if (DEBBUG) Serial.println("disconnesso e aspetto...");
 
-  // ciclo di verifica connessione...
-  if (WiFi.status() != WL_CONNECTED) {  // dentro se devo ritentare una connessione
-      if (DEBBUG) Serial.println("...ritento la connessione...");
-      connesso_ok = false;
-      dataora_ok = false;
-      WiFi.disconnect();
-      u8g2.drawXBMP(52, 0, 16, 16, blank_icon16x16);
-      u8g2.drawXBMP(112, 0, 16, 16, nocon_icon16x16);
-      u8g2.sendBuffer();
-      delay(2000);
-      if (DEBBUG) Serial.println("disconnesso e aspetto...");
+    // -------RICONNESSIONE WIFI----------
+    WiFi.begin(ssid.c_str(), pwd.c_str());
+    int ritento = 1;
+    int riprovato = 1;
+    if (DEBBUG) Serial.println("ri-connessione...");
+    delay(3000);
 
-      // -------RICONNESSIONE WIFI----------
-      WiFi.begin(ssid.c_str(), pwd.c_str());
-      int ritento = 1;
-      int riprovato = 1;
-      if (DEBBUG) Serial.println("ri-connessione...");
+    // ciclo di attesa connessione...
+    while (WiFi.status() != WL_CONNECTED) {
       delay(3000);
-
-      // ciclo di attesa connessione...
-      while (WiFi.status() != WL_CONNECTED) {
+      ritento = ritento + 1;
+      if (DEBBUG) Serial.print(ritento); Serial.print("-");
+      if (ritento >= 5) {  // qui attendo fino a 3 secondi di avere connessione
+        WiFi.disconnect();
+        delay(300);
+        WiFi.begin(ssid.c_str(), pwd.c_str());
         delay(3000);
-        ritento = ritento + 1;
-        if (DEBBUG) Serial.print(ritento); Serial.print("-");
-        if (ritento >= 5) {  // qui attendo fino a 3 secondi di avere connessione
-          WiFi.disconnect();
-          delay(300);
-          WiFi.begin(ssid.c_str(), pwd.c_str());
-          delay(3000);
-          ritento = 1;
-          riprovato = riprovato + 1; if (DEBBUG) Serial.print(riprovato); Serial.print("*");
-        }// fine if ritenta
+        ritento = 1;
+        riprovato = riprovato + 1; if (DEBBUG) Serial.print(riprovato); Serial.print("*");
+      }// fine if ritenta
 
-        if (riprovato >= 5) {
-          if (DEBBUG) Serial.println("***** impossibile connettersi al wifi - riprovo tra 1 minuto...");
-          //ritento=1;
-          //riprovato=1;
-          if (DEBBUG) Serial.println("uso il break..");
-          break; //esco dal while...
-        }// fine IF TIMEOUT ARRIVATO
-      }// fine WHILE esco da loop se wifi connesso... o per timeout
-      if (DEBBUG) Serial.println("fuori da while...");
-    
-      // aggiorno lo stato se WIFI connesso
-      if (WiFi.status() == WL_CONNECTED) {
-        connesso_ok = true;
-        u8g2.drawXBMP(112, 0, 16, 16, wifi1_icon16x16);
-        u8g2.sendBuffer();
-        //FASE = 100;
-        timeClient.begin();
-        timeClient.setTimeOffset(3600); // Set offset time in seconds to adjust...// GMT +1 = 3600
-        dataora_ok = true;
+      if (riprovato >= 5) {
+        if (DEBBUG) Serial.println("***** impossibile connettersi al wifi - riprovo tra 1 minuto...");
+        //ritento=1;
+        //riprovato=1;
+        if (DEBBUG) Serial.println("uso il break..");
+        break; //esco dal while...
+      }// fine IF TIMEOUT ARRIVATO
+    }// fine WHILE esco da loop se wifi connesso... o per timeout
+    if (DEBBUG) Serial.println("fuori da while...");
+
+    // aggiorno lo stato se WIFI connesso
+    if (WiFi.status() == WL_CONNECTED) {
+      connesso_ok = true;
+      u8g2.drawXBMP(112, 0, 16, 16, wifi1_icon16x16);
+      u8g2.sendBuffer();
+      initDateTime();
+      if (dataora_ok) {
         u8g2.drawXBMP(52, 0, 16, 16, clock_icon16x16);
         u8g2.sendBuffer();
-      } else {
-        connesso_ok = false;
-        dataora_ok = false;
-        //FASE = 5;
       }
+    } else {
+      connesso_ok = false;
+      dataora_ok = false;
+    }
   }// FINE If not connected
-    
-
-  //}// fine FASE 90   //++++++++++++++++++++++++++++++++++++++++++++++
+  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //------------------------------------------------------------------------
-  //if (FASE == 100) {  //++++++ AGGIORNAMENTO SERVER +++++++++++++++++++++++++
-    
-    if (connesso_ok && dataora_ok) {
-      if (DEBBUG) Serial.println("...upload dei dati sul SERVER");
-      u8g2.drawXBMP(92, 0, 16, 16, arrow_up_icon16x16);
-      u8g2.sendBuffer();
-      if (DEBBUG) Serial.println("...disegnata icona...");
-      // trasmissione su THINGSPEAK
-      if (DEBBUG) Serial.print(temp);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(hum);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(pre);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(VOC);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(MICS6814_COB);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(PM1);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(PM25);
-      if (DEBBUG) Serial.print("-");
-      if (DEBBUG) Serial.print(PM10);
-      if (DEBBUG) Serial.println("---;");
+  //++++++ AGGIORNAMENTO SERVER ++++++++++++++++++++++++++++++++++++++++++++
+  if (connesso_ok && dataora_ok) { // dentro se connesso al wifi e data e ora sono ok
+    if (DEBBUG) Serial.println("...upload dei dati sul SERVER");
+    u8g2.drawXBMP(92, 0, 16, 16, arrow_up_icon16x16);
+    u8g2.sendBuffer();
+    if (DEBBUG) Serial.println("...disegnata icona...");
+    // trasmissione su THINGSPEAK
+    if (DEBBUG) Serial.print(temp);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(hum);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(pre);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(VOC);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(MICS6814_CO);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(PM1);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(PM25);
+    if (DEBBUG) Serial.print("-");
+    if (DEBBUG) Serial.print(PM10);
+    if (DEBBUG) Serial.println("---;");
 
 
-      if (client.connect(server, 80)) {    //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        String postStr = "apikey=";
-        postStr += codice;
-        postStr += "&temp=";
-        postStr += String(temp);
-        postStr += "&hum=";
-        postStr += String(hum);
-        postStr += "&pre=";
-        postStr += String(pre);
-        postStr += "&voc=";
-        postStr += String(VOC);
-        postStr += "&co=";
-        postStr += String(COppm);
-        postStr += "&cox=";
-        postStr += String(MICS6814_COB);
-        postStr += "&nox=";
-        postStr += String(MICS6814_NO2);
-        postStr += "&pm1=";
-        postStr += String(PM1);
-        postStr += "&pm25=";
-        postStr += String(PM25);
-        postStr += "&pm10=";
-        postStr += String(PM10);
-        postStr += "&mac=";
-        postStr += getMacAdr(mac);
-        postStr += "&data=";
-        postStr += dayStamp;
-        postStr += "&ora=";
-        postStr += timeStamp;
+    if (client.connect(server, 80)) {    //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      String postStr = "apikey=";
+      postStr += codice;
+      postStr += "&temp=";
+      postStr += String(temp);
+      postStr += "&hum=";
+      postStr += String(hum);
+      postStr += "&pre=";
+      postStr += String(pre);
+      postStr += "&voc=";
+      postStr += String(VOC);
+      postStr += "&co=";
+      postStr += String(MICS6814_NH3);
+      postStr += "&cox=";
+      postStr += String(MICS6814_CO);
+      postStr += "&nox=";
+      postStr += String(MICS6814_NO2);
+      postStr += "&pm1=";
+      postStr += String(PM1);
+      postStr += "&pm25=";
+      postStr += String(PM25);
+      postStr += "&pm10=";
+      postStr += String(PM10);
+      postStr += "&mac=";
+      postStr += getMacAdr(mac);
+      postStr += "&data=";
+      postStr += dayStamp;
+      postStr += "&ora=";
+      postStr += timeStamp;
 
 
-        if (DEBBUG) Serial.println("...aggiunte tutte le stringhe a POSTSTR...");
+      if (DEBBUG) Serial.println("...aggiunte tutte le stringhe a POSTSTR...");
 
-        client.print("POST /api/channels/writelog HTTP/1.1\r\n");
-        client.print("Host: api.milanosmartpark.net\r\n");
-        client.print("Connection: close\r\n");
-        client.print("User-Agent: Wondermade\r\n");
-        client.print("Content-Type: application/x-www-form-urlencoded\r\n");
-        client.print("Content-Length: ");
-        client.print(postStr.length());
-        client.print("\r\n\r\n");
-        client.print(postStr);
-        if (DEBBUG) Serial.println("STRINGA DI POST INVIATA..........");
-        if (DEBBUG) Serial.println(postStr);
-        if (DEBBUG) Serial.println("...fine print dei CLIENT.PRINT...");
-        postStr = "";
-      } else {
-        Serial.println(".............errore........");
-        Serial.println(".............non connesso........");
-        Serial.println(".............non connesso........");
-      }
+      client.print("POST /api/channels/writelog HTTP/1.1\r\n");
+      client.print("Host: api.milanosmartpark.net\r\n");
+      client.print("Connection: close\r\n");
+      client.print("User-Agent: Wondermade\r\n");
+      client.print("Content-Type: application/x-www-form-urlencoded\r\n");
+      client.print("Content-Length: ");
+      client.print(postStr.length());
+      client.print("\r\n\r\n");
+      client.print(postStr);
+      if (DEBBUG) Serial.println("STRINGA DI POST INVIATA..........");
+      if (DEBBUG) Serial.println(postStr);
+      if (DEBBUG) Serial.println("...fine print dei CLIENT.PRINT...");
+      postStr = "";
+    } else {
+      Serial.println(".............errore........");
+      Serial.println(".............non connesso........");
+      Serial.println(".............non connesso........");
+    }
 
-      // Read all the lines of the reply from server and print them to Serial
-      while (client.available()) {
-        String line = client.readStringUntil('\r');
-        Serial.print(line);
-      }
-      delay(1000);
-      client.stop();
-      
-      u8g2.drawXBMP(92, 0, 16, 16, blank_icon16x16);
-      u8g2.sendBuffer();
-      
-    } // fine if connesso OK
+    // Read all the lines of the reply from server and print them to Serial
+    while (client.available()) {
+      String line = client.readStringUntil('\r');
+      Serial.print(line);
+    }
+    delay(1000);
+    client.stop();
 
-    //FASE = 5;
+    u8g2.drawXBMP(92, 0, 16, 16, blank_icon16x16);
+    u8g2.sendBuffer();
 
-  //}// fine FASE 100   //++++++++++++++++++++++++++++++++++++++++++++++
+  } // fine if connesso OK
+  //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   //------------------------------------------------------------------------
 
 
   //§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§
   delay(900);// ritardo su ciclo di circa 1 secondo
   MACA = getMacAdr(mac);
-  drawScrHead();
-  u8g2.drawStr(5, 32, "MAC:");
-  u8g2.sendBuffer();
-  delay(500);
-  u8g2.setCursor(15, 46);
-  u8g2.print(MACA.c_str());
-  u8g2.sendBuffer();
-  delay(400);
 
 
   // ++++++++ CONTROLLO DEEP SLEEP +++++++++++++++
   if (!mobile_unit) {
     Serial.println();
-    Serial.println("Going to sleep now");
+    Serial.println("Going to sleep now...");
     // ++++++++  DISATTIVO ALIMENTAZIONE DI TUTTI I SENSORI    +++++++++++++++
-    gas.powerOff(); // spengo il sensore MICS6814
-    //digitalWrite(4, LOW); // spengo il MOSFET
+    // spengo il sensore MICS6814
+    gas.powerOff();
+    gas.ledOff();
+    // spengo il MOSFET
+    //digitalWrite(4, LOW);
     delay(1000);
     //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    drawScrHead();
+    u8g2.drawStr(5, 32, "MAC:");
+    u8g2.setCursor(17, 44);
+    u8g2.print(MACA.c_str());
     u8g2.drawXBMP(52, 0, 16, 16, blank_icon16x16);
     u8g2.drawXBMP(112, 0, 16, 16, nocon_icon16x16);
     u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(25, 62, "SLEEP ATTIVO");
@@ -1676,9 +1611,10 @@ void loop() {
     esp_deep_sleep_start();   //§§§   GOOD NIGHT ! §§
     Serial.println("This will never be printed");
   } else {
-    u8g2.setFont(u8g2_font_6x13_tf); u8g2.drawStr(15, 62, "SLEEP DISATTIVATO");
-    u8g2.sendBuffer();
-    delay(TIME_TO_SLEEP * 1000); //se è configurata come centralina mobile, attende TIME_TO_SLEEP secondi prima della prossima istanza di void loop()
+    Serial.println("Prossime misurazioni tra 2 minuti");
+    for (int w = 0; w < 6; w++) { //stampa a rotazione sul display le misure per 120 secondi
+      displayMeasures();
+    }
   }
 
 }// fine LOOP
