@@ -13,15 +13,15 @@ VERSIONI MOD by THE ILARIA TEAM (Norman Mulinacci, Romeo Lorenzo e Diego Porras)
                         |                     |
                3V3--- o-|-3V3             GND-|-o
                       o-|-EN              D23-|-o --- MOSI SDCARD
-      MICS4514-COx -- o-|-VP(D36)         D22-|-o --- SCL OLED+BME+MICS6814
-      MICS4514-NOx -- o-|-VN(D39)     (D1)TX0-|-o
-      MICS4514-pre -- o-|-D34         (D3)RX0-|-o
+                      o-|-VP(D36)         D22-|-o --- SCL OLED+BME+MICS6814
+                      o-|-VN(D39)     (D1)TX0-|-o
+                      o-|-D34         (D3)RX0-|-o
     MQ-7(COx)A0 ----- o-|-D35             D21-|-o --- SDA OLED+BME+MICS6814
     MQ-7(COx)D0 ----- o-|-D32             GND-|-o
-          dip-1 ----- o-|-D33             D19-|-o --- MISO SDCARD u8
-          dip-2 ----- o-|-D25             D18-|-o --- SCK SDCARD
-          dip-3 ----- o-|-D26             D5 -|-o --- CS SDCARD
-          dip-4 ----- o-|-D27             D17-|-o  -x-x- non usare! protetto
+                      o-|-D33             D19-|-o --- MISO SDCARD u8
+                      o-|-D25             D18-|-o --- SCK SDCARD
+                      o-|-D26             D5 -|-o --- CS SDCARD
+                      o-|-D27             D17-|-o  -x-x- non usare! protetto
         RX SENS PM--- o-|-D14             D16-|-o  -x-x- non usare! protetto
         TX SENS PM--- o-|-D12             D4 -|-o --- PIN ATTIVAZ. MOSFET
                       o-|-GND             D0 -|-o
@@ -40,7 +40,17 @@ VERSIONI MOD by THE ILARIA TEAM (Norman Mulinacci, Romeo Lorenzo e Diego Porras)
 	
 Changelog:
 
-VERSIONE 25d (Norman Mulinacci):
+VERSIONE MOD 26 (Norman Mulinacci):
+
+	- sostituita libreria di gestione del sensore MICS6814 (nuova: MiCS6814-I2C.h)
+	- cambiata modalità di gestione della connessione WiFi, ora riprova 3 volte se non trova la rete
+	- cambiata sintassi di logging sul monitor seriale, ora dovrebbe essere più leggibile
+	- ora sul server al posto del COppm viene inviata la variabile NH3 del sensore MICS
+	- l'inizializzazione del firmware è stata velocizzata
+	- rimosse variabili e parti di codice non utilizzate
+	- ora il display mostra i valori misurati fino alle prossime misure in modalità mobile
+
+VERSIONE MOD 25d (Norman Mulinacci):
 
 	- risolto problema di memory leak nel modo di calcolare la media delle misurazioni
 	- aggiunto spegnimento del sensore Multichannel durante lo sleep
@@ -51,12 +61,12 @@ VERSIONE 25d (Norman Mulinacci):
 	- cambiate alcune modalità di gestione dello schermo integrato
 	- aggiornati i crediti nella schermata iniziale
 
-VERSIONE 25c2 (Lorenzo Romeo, Diego Porras):
+VERSIONE MOD 25c2 (Lorenzo Romeo, Diego Porras):
 
 	- aggiunta possibilità di inviare solo la media di (x) misurazioni, effettuate ogni (x) secondi
 	- aggiunti i valori precedentemente rimossi dal log su csv
 
-VERSIONE 25b (Norman Mulinacci):
+VERSIONE MOD 25b (Norman Mulinacci):
 
 	- trascritta e modificata funzione che calcola data per compatibilità con nuove versioni di NTPClient
 	- cambiata modalità di log su SD (da .txt a .csv), cambiato logging con valori in virgola
@@ -64,7 +74,7 @@ VERSIONE 25b (Norman Mulinacci):
 	- modificato comportamento in caso di errore su file RETE.txt
 	- unificato aspetto delle schermate del sistema e cambiata icona della scheda microsd
 
-VERSIONE 24 (Norman Mulinacci):
+VERSIONE MOD 24 (Norman Mulinacci):
 
 	- aggiunto delay di preriscaldamento dei sensori all'avvio
 	- modificata modalità di LOG su seriale e scheda SD (per maggiore conformità col CSV)
