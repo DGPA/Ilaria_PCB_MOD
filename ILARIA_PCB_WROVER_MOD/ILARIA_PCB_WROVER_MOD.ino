@@ -61,7 +61,7 @@ HardwareSerial PMSerial(2);  // seriale1  (UART0=0; UART1=1; UART2=2)
 RTC_DATA_ATTR int bootCount = 0;        //contatore di riavvii dopo lo sleep
 
 //++++++variabile per distinguere tra centralina mobile (true) o fissa (false)++++++++
-bool mobile_unit = true;
+bool mobile_unit = false;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 File root;
@@ -166,7 +166,7 @@ String MACA = "";
 bool MICS6814_run;
 bool BME680_run;
 bool PMS_run = true;
-bool MQ7_run = false;
+bool MQ7_run = true;
 //bool MICS4514_run = false;
 //bool SDS_run = false;
 //bool BME280_run = false;
